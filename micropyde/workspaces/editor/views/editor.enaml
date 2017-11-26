@@ -1,0 +1,53 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import os
+from enaml.widgets.api import Container, Timer
+from enaml.applib.live_editor_view import IDLE_THEME
+from enaml.scintilla.api import Scintilla
+
+
+def detect_syntax(path):
+    p, ext = os.path.splitext(path)
+    file_type = ext[1:]
+    SYNTAXES = Scintilla.syntax.items
+    if file_type in SYNTAXES:
+        return file_type
+    elif file_type in ['enaml', 'py', 'pyx']:
+        return 'python'
+    elif file_type in ['js', 'ts', 'jsx']:
+        return 'javascript'
+    elif file_type in ['ino']:
+        return 'cpp'
+    elif file_type in ['sh']:
+        return 'bash'
+
+enamldef EditorView(Container): view:
+    padding = 0
+    alias editor
+    attr plugin
+    attr model
+    Scintilla: editor:
+        syntax << detect_syntax(model.name)
+        theme = IDLE_THEME
+        settings = {
+            "tab_width": 4,
+            "use_tabs": False,
+            "indent": 4,
+            "tab_indents": True,
+            "backspace_unindents": True,
+            "autocompletion_threshold": 2,
+            "show_line_numbers": True,
+        }
+        autocomplete = 'all'
+        autocompletions << model.autocompletions
+        activated :: set_text(getattr(model, 'source'))
+        text_changed :: timer.start()
+        Timer: timer:
+            interval = 350
+            single_shot = True
+            timeout :: setattr(model, 'source', str(editor.get_text()))
