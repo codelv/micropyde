@@ -7,6 +7,7 @@
 #------------------------------------------------------------------------------
 import os
 import sys
+import enaml
 import subprocess
 from enaml.workbench.api import Extension, PluginManifest
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
@@ -14,6 +15,7 @@ from enaml.workbench.core.api import Command
 
 def pozetron_plugin():
     from .plugin import PozetronPlugin
+
     return PozetronPlugin()
 
 
@@ -26,7 +28,11 @@ def open_webpage(page):
 
 def pozetron_register(event):
     open_webpage('https://registration.apps.pozetron.com/registration')
-
+    with enaml.imports():
+        from .dialogs import RegisterhDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('pozetron')
+    RegisterhDialog(ui.window, event=event, plugin=plugin).exec_()
 
 def pozetron_help(event):
     open_webpage('https://www.pozetron.com/tutorial/')
@@ -79,7 +85,8 @@ enamldef Manifest(PluginManifest):
         MenuItem:
             path = '/pozetron'
             label = 'Pozetron'
-            after = 'file'
+            after = 'board'
+            before = 'settings'
             ItemGroup:
                 id = 'pozetron'
 

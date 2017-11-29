@@ -7,7 +7,7 @@
 #------------------------------------------------------------------------------
 import os
 from enaml.widgets.api import Container, Timer
-from enaml.applib.live_editor_view import IDLE_THEME
+from enaml.scintilla.idle_theme import THEMES, FRIENDLY_THEME
 from enaml.scintilla.api import Scintilla
 
 
@@ -17,7 +17,7 @@ def detect_syntax(path):
     SYNTAXES = Scintilla.syntax.items
     if file_type in SYNTAXES:
         return file_type
-    elif file_type in ['enaml', 'py', 'pyx']:
+    elif file_type in ['py', 'pyx']:
         return 'python'
     elif file_type in ['js', 'ts', 'jsx']:
         return 'javascript'
@@ -26,14 +26,15 @@ def detect_syntax(path):
     elif file_type in ['sh']:
         return 'bash'
 
+
 enamldef EditorView(Container): view:
     padding = 0
     alias editor
     attr plugin
     attr model
     Scintilla: editor:
-        syntax << detect_syntax(model.name)
-        theme = IDLE_THEME
+        syntax = 'enaml'#detect_syntax(model.name)
+        theme  << THEMES[plugin.theme]# if model.name else THEMES['idle']
         settings = {
             "tab_width": 4,
             "use_tabs": False,
@@ -45,9 +46,9 @@ enamldef EditorView(Container): view:
         }
         autocomplete = 'all'
         autocompletions << model.autocompletions
-        activated :: set_text(getattr(model, 'source'))
+        activated :: set_text(model.source)
         text_changed :: timer.start()
         Timer: timer:
             interval = 350
             single_shot = True
-            timeout :: setattr(model, 'source', str(editor.get_text()))
+            timeout :: model.source = editor.get_text()

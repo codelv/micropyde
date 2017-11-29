@@ -42,17 +42,6 @@ class MicropydeWorkbench(UIWorkbench):
             except Exception as e:
                 print(e)
 
-        def load_plugins(self):
-            """ Load any plugins from the micropyde.plugins package """
-            plugins = []
-            with enaml.imports():
-                #: TODO autodiscover these
-                from micropyde.plugins.pozetron.manifest import Manifest
-                plugins.append(Manifest)
-
-            for Manifest in plugins:
-                self.register(Manifest())
-
         def run(self):
             """ Run the UI workbench application.
         
@@ -80,9 +69,6 @@ class MicropydeWorkbench(UIWorkbench):
 
             #: Start the core plugin
             micropyde = self.get_plugin('micropyde')
-
-            #: Load other plugins
-            self.load_plugins()
 
             ui.start_application()
             self.save_config()

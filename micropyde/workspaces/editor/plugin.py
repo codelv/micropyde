@@ -5,13 +5,15 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 #------------------------------------------------------------------------------
-import re
+import os
 import json
+import pickle
 import hashlib
 import esptool
 import textwrap
+import traceback
 from enaml.workbench.api import Plugin
-from enaml.application import timed_call
+from enaml.scintilla.idle_theme import THEMES
 from atom.api import Atom, Unicode, Int, Instance, List, Bool, Enum, Dict
 from twisted.internet import reactor
 from twisted.internet.protocol import connectionDone
@@ -20,6 +22,7 @@ from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import inlineCallbacks, Deferred
 from . import inspection
 from .utils import async_sleep
+from micropyde.utils import Model
 
 
 class QueryProtocol(LineReceiver):
@@ -84,17 +87,34 @@ class QueryProtocol(LineReceiver):
         return self.request
 
 
-class Document(Atom):
+class Document(Model):
+    #: Name of the current document
     name = Unicode()
-    source = Unicode()
+
+    #: Source code
+    source = Unicode().tag(persist=False)
+
+    #: Any unsaved changes
+    unsaved = Bool(True)
+
+    #: Any linting errors
     errors = List()
+
+    #: Any autocomplete suggestions
     autocompletions = List()
-    checker = Instance(inspection.Checker)
+
+    #: Checker instance
+    checker = Instance(inspection.Checker).tag(persist=False)
 
     def _observe_source(self, change):
         if change['type'] == 'update':
             self._update_errors(change)
             self._update_autocompletions(change)
+            try:
+                with open(self.name) as f:
+                    self.unsaved = f.read() != self.source
+            except:
+                pass
 
     def _update_errors(self, change):
         checker, reporter = inspection.run(self.source, self.name)
@@ -134,13 +154,70 @@ class EditorPlugin(Plugin):
     #: Opened files
     documents = List()
     active_document = Instance(Document)
-    last_path = Unicode('~')
+    last_path = Unicode(os.path.expanduser('~/'))
 
     #: Files on device
     files = Dict()
     scanning_progress = Int()
     scanning_status = Unicode()
 
+    #: Theme
+    theme = Enum('tango', *THEMES.keys())
+
+    # -------------------------------------------------------------------------
+    # Plugin API
+    # -------------------------------------------------------------------------
+    def start(self):
+        """ Load the state when the plugin starts """
+        self._bind_observers()
+
+    def stop(self):
+        """ Unload any state observers when the plugin stops"""
+        self._unbind_observers()
+
+    # -------------------------------------------------------------------------
+    # State API
+    # -------------------------------------------------------------------------
+    def _bind_observers(self):
+        """ Try to load the plugin state """
+        #: Init state
+        try:
+            with open('editor.db', 'rb') as f:
+                state = pickle.load(f)
+            self.__setstate__(state)
+        except Exception as e:
+            print("Failed to load state: {}".format(e))
+
+        #: Hook up observers
+        for name, member in self.members().items():
+            if not member.metadata or not member.metadata.get('persist', True):
+                self.observe(name, self._save_state)
+
+    def _save_state(self, change):
+        """ Try to save the plugin state """
+        if change['type'] == 'update':
+            try:
+                print("Saving state due to change: {}".format(change))
+
+                #: Dump first so any failure to encode doesn't wipe out the
+                #: previous state
+                state = self.__getstate__()
+                for k in ['manifest', 'workbench']:
+                    if k in state:
+                        del state[k]
+                state = pickle.dumps(state)
+
+                with open('editor.db', 'wb') as f:
+                    f.write(state)
+            except Exception as e:
+                print("Failed to save state:")
+                traceback.print_exc()
+
+    def _unbind_observers(self):
+        """ Setup state observers """
+        for name, member in self.members().items():
+            if not member.metadata or not member.metadata.get('persist', True):
+                self.unobserve(name, self._save_state)
 
     # -------------------------------------------------------------------------
     # Device API
@@ -304,16 +381,24 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     def _default_documents(self):
         return [
-            Document(name="main.py"),
-            Document(name="boot.py"),
+            Document(),
         ]
 
     def _default_active_document(self):
         return self.documents[0]
 
     def open_file(self, event):
-        doc = Document(name=event.parameters['path'])
-        with open(event.parameters['path']) as f:
+        path = event.parameters['path']
+
+        #: Check if the document is already open
+        for doc in self.documents:
+            if doc.name == path:
+                self.active_document = doc
+                return
+
+        #: Otherwise open it
+        doc = Document(name=path, unsaved=False)
+        with open(path) as f:
             doc.source = f.read()
         docs = self.documents[:]
         docs.append(doc)
@@ -321,6 +406,35 @@ class EditorPlugin(Plugin):
         self.active_document = doc
         editor = self.get_editor()
         editor.set_text(doc.source)
+
+    def save_file(self, event):
+        """ Save the currently active document to disk
+        
+        """
+        doc = self.active_document
+        assert doc.name, "Can't save a document without a name"
+        with open(doc.name, 'w') as f:
+            f.write(doc.source)
+        doc.unsaved = False
+
+    def save_file_as(self, event):
+        """ Save the currently active document as the given name
+        overwriting and creating the directory path if necessary.
+        
+        """
+        doc = self.active_document
+        path = event.parameters['path']
+
+        if not doc.name:
+            doc.name = path
+            doc.unsaved = False
+
+        doc_dir = os.path.dirname(path)
+        if not os.path.exists(doc_dir):
+            os.makedirs(doc_dir)
+
+        with open(path, 'w') as f:
+            f.write(doc.source)
 
     # -------------------------------------------------------------------------
     # Modules API
@@ -382,23 +496,23 @@ class EditorPlugin(Plugin):
         self.indexing_status = "Done!"
         self.modules = index
 
-    def _default_modules(self):
-        """ Try to load module index from the cache """
-        try:
-            with open('modules.json') as f:
-                return json.load(f)
-        except Exception as e:
-            return {}
-
-    def _observe_modules(self, change):
-        """ Try to save module index to the cache """
-        if change['type'] == 'update':
-            try:
-                index = json.dumps(self.modules, indent=2)
-                with open('modules.json', 'w') as f:
-                    f.write(index)
-            except Exception as e:
-                print("Failed to save module index: {}".format(e))
+    # def _default_modules(self):
+    #     """ Try to load module index from the cache """
+    #     try:
+    #         with open('modules.json') as f:
+    #             return json.load(f)
+    #     except Exception as e:
+    #         return {}
+    #
+    # def _observe_modules(self, change):
+    #     """ Try to save module index to the cache """
+    #     if change['type'] == 'update':
+    #         try:
+    #             index = json.dumps(self.modules, indent=2)
+    #             with open('modules.json', 'w') as f:
+    #                 f.write(index)
+    #         except Exception as e:
+    #             print("Failed to save module index: {}".format(e))
 
     # -------------------------------------------------------------------------
     # File Browser API

@@ -7,6 +7,7 @@
 #------------------------------------------------------------------------------
 import os
 import sys
+from atom.api import Atom
 from enaml.image import Image
 from enaml.icon import Icon, IconImage
 
@@ -33,3 +34,20 @@ def menu_icon(name):
     if sys.platform == 'win32':
         return load_icon(name)
     return None
+
+
+class Model(Atom):
+    """ An atom object that can exclude members from it's state
+    by tagging the member with .tag(persist=False)
+    
+    """
+
+    def __getstate__(self):
+        """ Exclude file source from the state """
+        state = super(Model, self).__getstate__()
+        for name, member in self.members.items():
+            metadata = member.metadata
+            if name in state and metadata and \
+                    not metadata.get('persist', True):
+                del state[name]
+        return state

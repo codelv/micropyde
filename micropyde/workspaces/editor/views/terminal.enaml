@@ -12,10 +12,9 @@ from enaml.widgets.api import (
     Container, ObjectCombo, PushButton, Html, Field, Timer, Splitter, SplitItem
 )
 from enaml.scintilla.api import Scintilla
-from enaml.applib.live_editor_view import IDLE_THEME
+from enaml.scintilla.idle_theme import THEMES
 from micropyde.utils import load_icon
 from enamlx.widgets.api import KeyEvent
-
 
 class TerminalProtocol(Protocol):
     def __init__(self, view):
@@ -112,13 +111,14 @@ enamldef TerminalView(Container): view:
                 resist_height = 'weak'
                 Scintilla: console:
                     syntax = "python"
+                    theme << THEMES[plugin.theme]
                     #text_changed ::
                     #    self.proxy.widget.
                     activated ::
                         #set_text(getattr(console, 'buffer'))
                         self.proxy.widget.setReadOnly(True)
 
-                    theme = IDLE_THEME
+                    theme << THEMES[plugin.theme]
                     settings = {
                         "tab_width": 4,
                         "use_tabs": False,
@@ -142,7 +142,7 @@ enamldef TerminalView(Container): view:
                 ]
                 Scintilla: to_send:
                     syntax = "python"
-                    theme = IDLE_THEME
+                    theme << THEMES[plugin.theme]
                     enabled << opened
                     settings = {
                         "tab_width": 4,
@@ -160,7 +160,7 @@ enamldef TerminalView(Container): view:
                         single_shot = True
                         timeout ::
                             text = to_send.get_text()
-                            to_send.autocomplete_options = plugin.autocomplete(text)
+                            to_send.autocompletions = plugin.autocomplete(text)
                             #: Force trigger
                             if text.endswith("."):
                                 to_send.proxy.widget.autoCompleteFromAll()

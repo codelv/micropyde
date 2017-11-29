@@ -19,32 +19,13 @@ def window_factory(workbench):
         from enaml.workbench.ui.workbench_window import WorkbenchWindow
     return WorkbenchWindow(initial_size=(960, 540))
 
+
 def editor_factory(workbench):
     from .workspaces.editor import EditorWorkspace
     space = EditorWorkspace()
     space.window_title = 'Editor'
     return space
 
-#
-# def second_view_factory(workbench):
-#     from sample_workspace import SampleWorkspace
-#
-#     import enaml
-#     with enaml.imports():
-#         from second_view import SecondView, SecondManifest
-#
-#     space = SampleWorkspace()
-#     space.window_title = 'Second View'
-#     space.content_def = SecondView
-#     space.manifest_def = SecondManifest
-#     return space
-#
-#
-# def persistent_view_factory(workbench):
-#     from persistent_workspace import PersistentWorkspace
-#     space = PersistentWorkspace()
-#     space.window_title = 'Persistent View'
-#     return space
 
 class MainPlugin(Plugin):
 
@@ -90,12 +71,27 @@ enamldef Manifest(PluginManifest):
             label = 'File'
             ItemGroup:
                 id = 'user'
+            ItemGroup:
+                id = 'document'
 
         ActionItem:
-            path = '/file/close'
-            label = 'Close'
+            path = '/file/quit'
+            label = 'Quit'
             shortcut = 'Ctrl+Q'
             command = 'enaml.workbench.ui.close_window'
+
+        MenuItem:
+            path = '/settings'
+            label = 'Settings'
+            after = 'file'
+            ItemGroup:
+                id = 'settings'
+        MenuItem:
+            path = '/help'
+            label = 'Help'
+            after = 'settings'
+            ItemGroup:
+                id = 'help'
         # MenuItem:
         #     path = '/workspace'
         #     label = 'Workspace'

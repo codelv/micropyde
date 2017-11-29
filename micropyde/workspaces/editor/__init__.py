@@ -16,7 +16,7 @@ from enaml.workbench.ui.api import Workspace
 
 import enaml
 with enaml.imports():
-    from .view import EditorManifest, create_new_area
+    from .manifest import EditorManifest, create_new_area
 
 
 class EditorWorkspace(Workspace):
@@ -38,6 +38,18 @@ class EditorWorkspace(Workspace):
         manifest = EditorManifest()
         self._manifest_id = manifest.id
         self.workbench.register(manifest)
+        self.load_plugins()
+
+    def load_plugins(self):
+        """ Load any editor plugins from the micropyde.plugins package """
+        plugins = []
+        with enaml.imports():
+            #: TODO autodiscover these
+            from micropyde.plugins.pozetron.manifest import Manifest
+            plugins.append(Manifest)
+
+        for Manifest in plugins:
+            self.workbench.register(Manifest())
 
     def stop(self):
         """ Stop the workspace instance.
