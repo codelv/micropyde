@@ -7,8 +7,8 @@
 #------------------------------------------------------------------------------
 import os
 from enaml.widgets.api import Container, Timer
-from enaml.scintilla.idle_theme import THEMES, FRIENDLY_THEME
 from enaml.scintilla.api import Scintilla
+from .themes import THEMES, FRIENDLY_THEME
 
 
 def detect_syntax(path):
@@ -44,8 +44,8 @@ enamldef EditorView(Container): view:
             "autocompletion_threshold": 2,
             "show_line_numbers": True,
         }
-        autocomplete = 'all'
-        autocompletions << model.autocompletions
+        #autocomplete = 'all'
+        #autocompletions << model.suggestions
         activated :: set_text(model.source)
         text_changed :: timer.start()
         Timer: timer:

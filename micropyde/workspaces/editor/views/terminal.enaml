@@ -12,7 +12,7 @@ from enaml.widgets.api import (
     Container, ObjectCombo, PushButton, Html, Field, Timer, Splitter, SplitItem
 )
 from enaml.scintilla.api import Scintilla
-from enaml.scintilla.idle_theme import THEMES
+from .themes import THEMES
 from micropyde.utils import load_icon
 from enamlx.widgets.api import KeyEvent
 
@@ -152,7 +152,7 @@ enamldef TerminalView(Container): view:
                         "backspace_unindents": True,
                         "autocompletion_threshold": 1,
                     }
-                    autocomplete = 'all'
+                    #autocomplete = 'all'
                     #autocomplete_options << ['option2', 'option1']
                     text_changed :: timer.start()
                     Timer: timer:
@@ -160,7 +160,7 @@ enamldef TerminalView(Container): view:
                         single_shot = True
                         timeout ::
                             text = to_send.get_text()
-                            to_send.autocompletions = plugin.autocomplete(text)
+                            #to_send.autocompletions = plugin.autocomplete(text)
                             #: Force trigger
                             if text.endswith("."):
                                 to_send.proxy.widget.autoCompleteFromAll()

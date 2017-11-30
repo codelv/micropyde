@@ -1,0 +1,260 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import re
+import sys
+if sys.platform == 'win32':
+    from enaml import winutil
+from enaml.layout.api import align, hbox, spacer
+from enaml.core.api import Conditional
+from enaml.stdlib.dialog_buttons import DialogButtonBox, DialogButton
+from enaml.stdlib.task_dialog import (
+    TaskDialogBody, TaskDialogCommandArea,
+    TaskDialogContentArea, TaskDialogDetailsArea, TaskDialogFootnoteArea,
+    TaskDialogIconArea, TaskDialogInstructionArea, TaskDialogStyleSheet
+)
+from enaml.widgets.api import (
+    Dialog, Field, Label, PushButton, RadioButton, CheckBox, Html,
+    ProgressBar, ObjectCombo, Form, Container, SpinBox, FileDialogEx
+)
+from serial.tools.list_ports import comports
+from twisted.internet.protocol import ProcessProtocol
+from twisted.internet.defer import Deferred
+
+
+# class FlashProcessProtocol(ProcessProtocol):
+#     def __init__(self, view):
+#         self.view = view
+#
+#     def outReceived(self, data):
+#         lines = data.decode()
+#         source = []
+#         for line in lines.split("\n"):
+#             m = re.search(r'\((\d+)\s*%\)',line)
+#             if m:
+#                 self.view.progress = int(m.group(1))
+#             source.append(line)
+#         self.view.source += "<br/>".join(source)
+#
+#     def processExited(self, reason):
+#         self.view.source += "Exited: {}".format(reason.value.exitCode)
+#         self.view.complete = True
+#         self.view.status = "Success" if reason.value.exitCode == 0 else "Failed"
+
+
+enamldef RegisterhDialog(Dialog): dialog:
+    title = 'Register Account'
+    initial_size = (640, 320)
+    attr plugin
+    attr event
+    TaskDialogStyleSheet:
+            pass
+    TaskDialogBody:
+        TaskDialogInstructionArea:
+            Label:
+                style_class = 'task-dialog-instructions'
+                text = 'Register Pozetron Account'
+        TaskDialogContentArea:
+            Label:
+                style_class = 'task-dialog-content'
+                text = 'Enter your Pozetron key and secret from the email'
+            Form:
+                Label:
+                    text = "Key ID"
+                Field: key_id:
+                    pass
+                Label:
+                    text = "Secret"
+                Field: secret:
+                    pass
+        TaskDialogCommandArea:
+            constraints = [
+                hbox(spacer, btn_yes, btn_no),
+                align('v_center', btn_yes, btn_no),
+            ]
+            PushButton: btn_no:
+                text = "Cancel"
+                clicked :: dialog.close()
+            PushButton: btn_yes:
+                text = "Save"
+                enabled << len(key_id.text) == 64 and len(secret.text) == 64
+                clicked ::
+                    plugin.register(key_id.text, secret.text)
+                    dialog.close()
+
+
+# class EraseProcessProtocol(ProcessProtocol):
+#     def __init__(self, view):
+#         self.view = view
+#
+#     def outReceived(self, data):
+#         source = []
+#         for line in data.decode().split("\n"):
+#             source.append(line)
+#         self.view.source += "<br/>".join(source)
+#
+#     def processExited(self, reason):
+#         v = self.view
+#         v.source += "Exited: {}".format(reason.value.exitCode)
+#         v.complete = True
+#         v.status = "Success" if reason.value.exitCode == 0 else "Failed"
+#
+#
+# enamldef EraseDialog(Dialog): dialog:
+#     title = 'Erase flash'
+#     attr command
+#     attr event
+#     attr source = ""
+#     attr complete = False
+#     attr plugin
+#     attr status = ""
+#     initial_size = (640, 320)
+#     func run():
+#         details.visible = True
+#         console.source = ""
+#         proto = EraseProcessProtocol(dialog)
+#         plugin.erase_flash(proto)
+#
+#     TaskDialogStyleSheet:
+#             pass
+#     TaskDialogBody:
+#         TaskDialogInstructionArea:
+#             Label:
+#                 style_class = 'task-dialog-instructions'
+#                 text = 'Are you sure you want to erase?'
+#         TaskDialogContentArea:
+#             Label:
+#                 style_class = 'task-dialog-content'
+#                 text = 'This operation cannot be undone.'
+#             Form:
+#                 ObjectCombo: ports:
+#                     items = comports()
+#                     selected ::
+#                         editor = event.workbench.get_plugin('micropyde.editor')
+#                         editor.port = change['value'].device
+#                 PushButton: btn:
+#                     text = "Refresh"
+#                     clicked :: ports.items = comports()
+#         TaskDialogDetailsArea: details:
+#             visible = False
+#             Html: console:
+#                 source << dialog.source
+#         TaskDialogCommandArea:
+#             constraints = [
+#                 hbox(spacer, lbl, btn_yes, btn_no),
+#                 align('v_center', lbl, btn_yes, btn_no)
+#             ]
+#             Label: lbl:
+#                 text << status
+#             PushButton: btn_no:
+#                 text << "Close" if dialog.complete else "Cancel"
+#                 clicked :: dialog.close()
+#             PushButton: btn_yes:
+#                 text = "Erase"
+#                 clicked :: run()
+#
+#
+# class InfoProcessProtocol(ProcessProtocol):
+#     """
+#     esptool.py --port /dev/ttyUSB0 flash_id
+#     esptool.py v2.1
+#     Connecting....
+#     Detecting chip type... ESP8266
+#     Chip is ESP8266
+#     Uploading stub...
+#     Running stub...
+#     Stub running...
+#     Manufacturer: c8
+#     Device: 4016
+#     Detected flash size: 4MB
+#     Hard resetting...
+#
+#     esptool.py --port /dev/ttyUSB0 chip_id
+#     esptool.py v2.1
+#     Connecting....
+#     Detecting chip type... ESP8266
+#     Chip is ESP8266
+#     Uploading stub...
+#     Running stub...
+#     Stub running...
+#     Chip ID: 0x0066f213
+#     Hard resetting...
+#
+#
+#
+#     """
+#
+#     def __init__(self, view):
+#         self.view = view
+#         self.done = Deferred()
+#
+#     def outReceived(self, data):
+#         source = []
+#         for line in data.decode().split("\n"):
+#             source.append(line)
+#         self.view.source += "<br/>".join(source)
+#
+#     def processExited(self, reason):
+#         v = self.view
+#         v.complete = True
+#         v.status = "Success" if reason.value.exitCode == 0 else "Failed"
+#         self.done.callback(reason.value.exitCode)
+#
+# enamldef BoardInfoDialog(Dialog): dialog:
+#     title = 'Board Info'
+#     attr command
+#     attr event
+#     attr source = ""
+#     attr complete = False
+#     attr plugin
+#     attr status = ""
+#     initial_size = (640, 320)
+#     func run():
+#         details.visible = True
+#         console.source = ""
+#         proto = InfoProcessProtocol(dialog)
+#         plugin.get_flash_info(proto)
+#
+#         # #: After the first is done run the second
+#         # proto.done.addCallback(
+#         #     lambda r,p=plugin,proto=proto:p.get_chip_info(proto))
+#
+#     TaskDialogStyleSheet:
+#             pass
+#     TaskDialogBody:
+#         TaskDialogInstructionArea:
+#             Label:
+#                 style_class = 'task-dialog-instructions'
+#                 text = 'Board info'
+#         TaskDialogContentArea:
+#             Label:
+#                 style_class = 'task-dialog-content'
+#                 text = 'Read flash_id and chip_id from the board.'
+#             Form:
+#                 ObjectCombo: ports:
+#                     items = comports()
+#                     selected ::
+#                         editor = event.workbench.get_plugin('micropyde.editor')
+#                         editor.port = change['value'].device
+#                 PushButton: btn:
+#                     text = "Refresh"
+#                     clicked :: ports.items = comports()
+#         TaskDialogDetailsArea: details:
+#             visible = False
+#             Html: console:
+#                 source << dialog.source
+#         TaskDialogCommandArea:
+#             constraints = [
+#                 hbox(spacer, btn_yes, btn_no),
+#                 align('v_center', btn_yes, btn_no)
+#             ]
+#             PushButton: btn_no:
+#                 text << "Close" if dialog.complete else "Cancel"
+#                 clicked :: dialog.close()
+#             PushButton: btn_yes:
+#                 text = "Get"
+#                 clicked :: run()

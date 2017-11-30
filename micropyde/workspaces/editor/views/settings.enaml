@@ -1,0 +1,88 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import re
+import sys
+if sys.platform == 'win32':
+    from enaml import winutil
+from enaml.core.api import Looper
+from enaml.layout.api import align, hbox, spacer
+from enaml.core.api import Conditional
+from enaml.stdlib.dialog_buttons import DialogButtonBox, DialogButton
+from enaml.stdlib.task_dialog import (
+    TaskDialogBody, TaskDialogCommandArea,
+    TaskDialogContentArea, TaskDialogDetailsArea, TaskDialogFootnoteArea,
+    TaskDialogIconArea, TaskDialogInstructionArea, TaskDialogStyleSheet
+)
+from enaml.widgets.api import (
+    Dialog, Field, Label, PushButton, RadioButton, CheckBox, Html,
+    ProgressBar, ObjectCombo, Form, Container, SpinBox, FileDialogEx,
+    Splitter, SplitItem
+)
+from serial.tools.list_ports import comports
+from twisted.internet.protocol import ProcessProtocol
+from twisted.internet.defer import Deferred
+from enamlx.widgets.api import TreeView, TreeViewItem
+
+enamldef SettingsPage(Container):
+    pass
+
+enamldef SettingsDialog(Dialog): dialog:
+    title = 'Settings'
+    initial_size = (720, 480)
+    attr plugin
+    attr event
+    TaskDialogStyleSheet:
+            pass
+    TaskDialogBody:
+        TaskDialogInstructionArea:
+            Label:
+                style_class = 'task-dialog-instructions'
+                text = 'Configure editor'
+        # TaskDialogContentArea:
+        #     Label:
+        #         style_class = 'task-dialog-content'
+        #         text = 'Editor settings'
+        TaskDialogDetailsArea: details:
+            visible = True
+            Splitter:
+                SplitItem:
+                    Container:
+                        padding = 0
+                        Field:
+                            placeholder = "Search..."
+                        TreeView: tree:
+                            horizontal_headers = ['Setting']
+                            horizontal_stretch = True
+                            items = ['Editor']
+                            Looper:
+                                iterable << tree.items
+                                TreeViewItem:
+                                    text = loop_item
+                SplitItem:
+                    stretch = 4
+                    Container: content:
+                        padding = 0
+                        Html:
+                            source = "Some Content"
+
+        TaskDialogCommandArea:
+            constraints = [
+                hbox(spacer, btn_ok, btn_no, btn_apply),
+                align('v_center', btn_ok, btn_no, btn_apply),
+            ]
+            PushButton: btn_ok:
+                text = "Ok"
+                clicked :: dialog.close()
+            PushButton: btn_no:
+                text = "Cancel"
+                clicked :: dialog.close()
+            PushButton: btn_apply:
+                text = "Apply"
+                clicked :: dialog.close()
+
+

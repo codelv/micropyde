@@ -6,15 +6,13 @@
 # The full license is in the file LICENSE, distributed with this software.
 #------------------------------------------------------------------------------
 import os
-import json
 import pickle
 import hashlib
 import esptool
 import textwrap
 import traceback
 from enaml.workbench.api import Plugin
-from enaml.scintilla.idle_theme import THEMES
-from atom.api import Atom, Unicode, Int, Instance, List, Bool, Enum, Dict
+from atom.api import Unicode, Int, Instance, List, Bool, Enum, Dict, observe
 from twisted.internet import reactor
 from twisted.internet.protocol import connectionDone
 from twisted.internet.serialport import SerialPort
@@ -23,7 +21,11 @@ from twisted.internet.defer import inlineCallbacks, Deferred
 from . import inspection
 from .utils import async_sleep
 from micropyde.utils import Model
-
+from enaml.layout.api import (
+    AreaLayout, TabLayout, DockBarLayout
+)
+from enaml.application import deferred_call, timed_call
+from .views.themes import THEMES
 
 class QueryProtocol(LineReceiver):
     """ Handles inspecting the modules on a micropython device
@@ -101,15 +103,28 @@ class Document(Model):
     errors = List()
 
     #: Any autocomplete suggestions
-    autocompletions = List()
+    suggestions = List()
 
     #: Checker instance
     checker = Instance(inspection.Checker).tag(persist=False)
 
+    def _default_source(self):
+        """ Load the document from the path given by `name`.
+        If it fails to load, nothing will be returned and an error
+        will be set.
+        """
+        try:
+            print("Loading '{}' from disk.".format(self.name))
+            with open(self.name) as f:
+                return f.read()
+        except Exception as e:
+            self.errors = [str(e)]
+        return ""
+
     def _observe_source(self, change):
+        self._update_errors(change)
+        self._update_suggestions(change)
         if change['type'] == 'update':
-            self._update_errors(change)
-            self._update_autocompletions(change)
             try:
                 with open(self.name) as f:
                     self.unsaved = f.read() != self.source
@@ -117,13 +132,19 @@ class Document(Model):
                 pass
 
     def _update_errors(self, change):
+        """ Parse the source and try to detect any errors
+         
+        """
+        if self.errors and change['type'] == 'create':
+            #: Don't squash load errors
+            return
         checker, reporter = inspection.run(self.source, self.name)
-        warnings = reporter._stdout.getvalue().split("\n")
-        errors = reporter._stderr.getvalue().split("\n")
+        warnings = [l for l in reporter._stdout.getvalue().split("\n") if l]
+        errors = [l for l in reporter._stderr.getvalue().split("\n") if l]
         self.errors = warnings + errors
         self.checker = checker
 
-    def _update_autocompletions(self, change):
+    def _update_suggestions(self, change):
         pass
 
 
@@ -144,12 +165,12 @@ class EditorPlugin(Plugin):
 
     #: Serial setup
     com_baud = Int(115200)
-    com_port = Instance(SerialPort)
+    com_port = Instance(SerialPort).tag(persist=False)
 
     #: Module index
     modules = Dict()
-    indexing_progress = Int()
-    indexing_status = Unicode()
+    indexing_progress = Int().tag(persist=False)
+    indexing_status = Unicode().tag(persist=False)
 
     #: Opened files
     documents = List()
@@ -158,11 +179,14 @@ class EditorPlugin(Plugin):
 
     #: Files on device
     files = Dict()
-    scanning_progress = Int()
-    scanning_status = Unicode()
+    scanning_progress = Int().tag(persist=False)
+    scanning_status = Unicode().tag(persist=False)
 
     #: Theme
     theme = Enum('tango', *THEMES.keys())
+
+    #: Dock area layout
+    area_layout = Instance(AreaLayout)
 
     # -------------------------------------------------------------------------
     # Plugin API
@@ -202,7 +226,11 @@ class EditorPlugin(Plugin):
                 #: Dump first so any failure to encode doesn't wipe out the
                 #: previous state
                 state = self.__getstate__()
-                for k in ['manifest', 'workbench']:
+                excluded = ['manifest', 'workbench'] + [
+                    m.name for m in self.members().values()
+                    if m.metadata and not m.metadata.get('persist', True)
+                ]
+                for k in excluded:
                     if k in state:
                         del state[k]
                 state = pickle.dumps(state)
@@ -356,6 +384,32 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Editor API
     # -------------------------------------------------------------------------
+    def _default_area_layout(self):
+        return AreaLayout(
+            TabLayout(*['editor-item-{}'.format(doc.name)
+                        for doc in self.documents]),
+            dock_bars=[
+                DockBarLayout(
+                    'modules-item',
+                    'files-item',
+                    'inspection-item',
+                    position='left',
+                ),
+                DockBarLayout(
+                    'console-item',
+                    'ipython-item',
+                    position='bottom',
+                ),
+            ],
+        )
+
+    @observe('documents')
+    def _update_area_layout(self, change):
+        if change['type'] != 'update':
+            return
+        deferred_call(
+            lambda: setattr(self, 'area_layout', self._default_area_layout()))
+
     def get_dock_area(self):
         ui = self.workbench.get_plugin('enaml.workbench.ui')
         return ui.workspace.content.find('editor')
@@ -380,12 +434,49 @@ class EditorPlugin(Plugin):
     # Document API
     # -------------------------------------------------------------------------
     def _default_documents(self):
-        return [
-            Document(),
-        ]
+        return [Document()]
 
     def _default_active_document(self):
         return self.documents[0]
+
+    # def _observe_documents(self, change):
+    #     """ When a document is added or removed insert or remove it from
+    #     the dock area.
+    #     """
+    #     if change['type'] == 'update':
+    #         area = self.get_dock_area()
+    #         op = InsertItem()
+    #         area.update_layout(op)
+
+    def new_file(self, event):
+        path = event.parameters['path']
+        doc = Document(name=path)
+        docs = self.documents
+        docs.append(doc)
+        self.documents = docs
+        self.active_document = doc
+
+    def close_file(self, event):
+        """ Close the file with the given path and remove it from
+        the document list. If multiple documents with the same file
+        are open this only closes the first one it finds.
+        
+        """
+        path = event.parameters['path']
+        docs = self.documents
+        opened = [d for d in docs if d.name == path]
+        if not opened:
+            return
+        print("Closing '{}'".format(path))
+        doc = opened[0]
+        docs.remove(doc)
+
+        #: If we closed the active document
+        if self.active_document == doc:
+            self.active_document = docs[0] if docs else Document()
+
+        self.documents = docs
+
 
     def open_file(self, event):
         path = event.parameters['path']
@@ -395,6 +486,7 @@ class EditorPlugin(Plugin):
             if doc.name == path:
                 self.active_document = doc
                 return
+        print("Opening '{}'".format(path))
 
         #: Otherwise open it
         doc = Document(name=path, unsaved=False)

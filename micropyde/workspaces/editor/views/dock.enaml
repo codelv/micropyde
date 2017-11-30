@@ -22,6 +22,7 @@ from enaml.widgets.api import (
 from enaml.workbench.api import Extension, PluginManifest
 from enaml.workbench.core.api import Command
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
+from enaml.widgets.dock_events import DockItemEvent
 
 from micropyde.utils import load_icon
 
@@ -71,6 +72,9 @@ def format_title(docs, doc, path, unsaved):
 def editor_items(documents):
     return ['editor-item-{}'.format(doc.name) for doc in documents]
 
+def get_document(documents, path):
+    return [d for d in documents if d.name==path]
+
 
 enamldef DockView(DockArea): view:
     name = 'editor'
@@ -80,11 +84,19 @@ enamldef DockView(DockArea): view:
     dock_events_enabled = True
     dock_event ::
         event = change['value']
-        print(event)
+
+        #: Update the active document
+        if event.type == DockItemEvent.Type.Shown \
+                and 'editor-item-' in event.name:
+            path = event.name.split("editor-item-")[-1]
+            matches = [d for d in plugin.documents if d.name==path]
+            if matches:
+                plugin.active_document = matches[0]
 
     #: Set the initial layout
-    layout = AreaLayout(
-        TabLayout(*editor_items(plugin.documents)),
+    layout << AreaLayout(
+        TabLayout(*['editor-item-{}'.format(doc.name)
+                    for doc in plugin.documents]),
         dock_bars=[
             DockBarLayout(
                 'modules-item',
@@ -99,6 +111,7 @@ enamldef DockView(DockArea): view:
             ),
         ],
     )
+    #layout >> plugin.area_layout
 
     Looper:
         iterable << plugin.documents
