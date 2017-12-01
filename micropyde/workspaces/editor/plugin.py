@@ -12,7 +12,8 @@ import esptool
 import textwrap
 import traceback
 from enaml.workbench.api import Plugin
-from atom.api import Unicode, Int, Instance, List, Bool, Enum, Dict, observe
+from atom.api import (Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
+                      observe)
 from twisted.internet import reactor
 from twisted.internet.protocol import connectionDone
 from twisted.internet.serialport import SerialPort
@@ -26,6 +27,7 @@ from enaml.layout.api import (
 )
 from enaml.application import deferred_call, timed_call
 from .views.themes import THEMES
+
 
 class QueryProtocol(LineReceiver):
     """ Handles inspecting the modules on a micropython device
@@ -95,6 +97,7 @@ class Document(Model):
 
     #: Source code
     source = Unicode().tag(persist=False)
+    cursor = Tuple(default=(0, 0)).tag(persist=False)
 
     #: Any unsaved changes
     unsaved = Bool(True)
@@ -145,10 +148,34 @@ class Document(Model):
         self.checker = checker
 
     def _update_suggestions(self, change):
-        pass
+        """ Determine code completion suggestions for the current cursor
+        position in the document.
+        """
+        checker = self.checker
+        if not checker:
+            return
+
+        plugin = EditorPlugin.instance()
+
+        cursor = self.cursor
+        lines = self.source.split("\n")
+        if lines:
+            line = lines[cursor[0]][:cursor[1]] if cursor else lines[-1]
+        else:
+            line = ""
+
+        suggestions = []
+        if checker.deadScopes:
+            for scope in checker.deadScopes:
+                suggestions.extend(scope.keys())
+        suggestions.extend(plugin.autocomplete(line))
+        self.suggestions = suggestions
 
 
 class EditorPlugin(Plugin):
+    #: Instance valid while plugin is active
+    _instance = None
+
     #: Flash setup
     port = Unicode('/dev/ttyUSB0')
     flash_chip = Enum('auto', 'esp8266', 'esp32')
@@ -183,7 +210,7 @@ class EditorPlugin(Plugin):
     scanning_status = Unicode().tag(persist=False)
 
     #: Theme
-    theme = Enum('tango', *THEMES.keys())
+    theme = Enum('friendly', *THEMES.keys())
 
     #: Dock area layout
     area_layout = Instance(AreaLayout)
@@ -191,13 +218,19 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Plugin API
     # -------------------------------------------------------------------------
+    @classmethod
+    def instance(cls):
+        return EditorPlugin._instance
+
     def start(self):
         """ Load the state when the plugin starts """
         self._bind_observers()
+        EditorPlugin._instance = self
 
     def stop(self):
         """ Unload any state observers when the plugin stops"""
         self._unbind_observers()
+        EditorPlugin._instance = None
 
     # -------------------------------------------------------------------------
     # State API
@@ -449,9 +482,14 @@ class EditorPlugin(Plugin):
     #         area.update_layout(op)
 
     def new_file(self, event):
-        path = event.parameters['path']
+        """ Create a new file with the given path
+        
+        """
+        path = event.parameters.get('path')
+        if not path:
+            return
         doc = Document(name=path)
-        docs = self.documents
+        docs = self.documents[:]
         docs.append(doc)
         self.documents = docs
         self.active_document = doc
@@ -462,7 +500,9 @@ class EditorPlugin(Plugin):
         are open this only closes the first one it finds.
         
         """
-        path = event.parameters['path']
+        path = event.parameters.get('path')
+        if not path:
+            return
         docs = self.documents
         opened = [d for d in docs if d.name == path]
         if not opened:
@@ -477,8 +517,10 @@ class EditorPlugin(Plugin):
 
         self.documents = docs
 
-
     def open_file(self, event):
+        """ Open a file from the local filesystem 
+        
+        """
         path = event.parameters['path']
 
         #: Check if the document is already open

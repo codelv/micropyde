@@ -42,12 +42,14 @@ enamldef EditorView(Container): view:
             "tab_indents": True,
             "backspace_unindents": True,
             "autocompletion_threshold": 2,
+            "autocompletion_case_sensitive": True,
             "show_line_numbers": True,
         }
-        #autocomplete = 'all'
-        #autocompletions << model.suggestions
+        autocomplete = 'all'
+        autocompletions << model.suggestions
         activated :: set_text(model.source)
         text_changed :: timer.start()
+        cursor_changed :: model.cursor = change['value']
         Timer: timer:
             interval = 350
             single_shot = True

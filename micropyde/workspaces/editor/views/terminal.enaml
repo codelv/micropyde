@@ -152,15 +152,14 @@ enamldef TerminalView(Container): view:
                         "backspace_unindents": True,
                         "autocompletion_threshold": 1,
                     }
-                    #autocomplete = 'all'
-                    #autocomplete_options << ['option2', 'option1']
+                    autocomplete = 'all'
                     text_changed :: timer.start()
                     Timer: timer:
                         interval = 50
                         single_shot = True
                         timeout ::
                             text = to_send.get_text()
-                            #to_send.autocompletions = plugin.autocomplete(text)
+                            to_send.autocompletions = plugin.autocomplete(text)
                             #: Force trigger
                             if text.endswith("."):
                                 to_send.proxy.widget.autoCompleteFromAll()

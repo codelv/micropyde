@@ -43,11 +43,32 @@ class Model(Atom):
     """
 
     def __getstate__(self):
-        """ Exclude file source from the state """
+        """ Exclude any members from the state that are
+        tagged with `persist=False`. 
+        
+        """
         state = super(Model, self).__getstate__()
-        for name, member in self.members.items():
+        for name, member in self.members().items():
             metadata = member.metadata
             if name in state and metadata and \
                     not metadata.get('persist', True):
                 del state[name]
         return state
+
+    def __setstate__(self, state):
+        """  Set the state ignoring any fields that fail to set which
+        may occur due to version changes.
+        
+        """
+        for key, value in state.items():
+            try:
+                setattr(self, key, value)
+            except Exception as e:
+                #: Shorten any long values
+                v = str(value)
+                if len(v) > 100:
+                    v[:100]+"..."
+
+                print("Failed to restore state '{}.{} = {}'".format(
+                    self, key, v
+                ))
