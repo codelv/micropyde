@@ -6,27 +6,39 @@
 # The full license is in the file LICENSE, distributed with this software.
 #------------------------------------------------------------------------------
 import os
-import pickle
+import jedi
+import enaml
+import jsonpickle as pickle
 import hashlib
 import esptool
 import textwrap
 import traceback
-from enaml.workbench.api import Plugin
+
 from atom.api import (Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
-                      observe)
+                      ContainerList, observe)
+
+from enaml.workbench.api import Plugin
+from enaml.layout.api import (
+    AreaLayout, TabLayout, DockBarLayout, InsertTab, InsertItem, RemoveItem
+)
+from enaml.application import timed_call, deferred_call
+
+from micropyde.utils import Model
+from micropyde.workspaces.editor import inspection
+from micropyde.workspaces.editor.utils import async_sleep
+from micropyde.workspaces.editor.views.themes import THEMES
+
 from twisted.internet import reactor
 from twisted.internet.protocol import connectionDone
 from twisted.internet.serialport import SerialPort
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import inlineCallbacks, Deferred
-from . import inspection
-from .utils import async_sleep
-from micropyde.utils import Model
-from enaml.layout.api import (
-    AreaLayout, TabLayout, DockBarLayout
-)
-from enaml.application import deferred_call, timed_call
-from .views.themes import THEMES
+
+
+def EditorItem(*args, **kwargs):
+    with enaml.imports():
+        from micropyde.workspaces.editor.views.dock import DockEditorItem
+    return DockEditorItem(*args, **kwargs)
 
 
 class QueryProtocol(LineReceiver):
@@ -151,25 +163,8 @@ class Document(Model):
         """ Determine code completion suggestions for the current cursor
         position in the document.
         """
-        checker = self.checker
-        if not checker:
-            return
-
         plugin = EditorPlugin.instance()
-
-        cursor = self.cursor
-        lines = self.source.split("\n")
-        if lines:
-            line = lines[cursor[0]][:cursor[1]] if cursor else lines[-1]
-        else:
-            line = ""
-
-        suggestions = []
-        if checker.deadScopes:
-            for scope in checker.deadScopes:
-                suggestions.extend(scope.keys())
-        suggestions.extend(plugin.autocomplete(line))
-        self.suggestions = suggestions
+        self.suggestions = plugin.autocomplete(self.source, self.cursor)
 
 
 class EditorPlugin(Plugin):
@@ -200,7 +195,7 @@ class EditorPlugin(Plugin):
     indexing_status = Unicode().tag(persist=False)
 
     #: Opened files
-    documents = List()
+    documents = ContainerList(Document)
     active_document = Instance(Document)
     last_path = Unicode(os.path.expanduser('~/'))
 
@@ -213,7 +208,7 @@ class EditorPlugin(Plugin):
     theme = Enum('friendly', *THEMES.keys())
 
     #: Dock area layout
-    area_layout = Instance(AreaLayout)
+    _area_saves_pending = Int().tag(persist=False)
 
     # -------------------------------------------------------------------------
     # Plugin API
@@ -239,20 +234,20 @@ class EditorPlugin(Plugin):
         """ Try to load the plugin state """
         #: Init state
         try:
-            with open('editor.db', 'rb') as f:
-                state = pickle.load(f)
+            with open('editor.db', 'r') as f:
+                state = pickle.loads(f.read())
             self.__setstate__(state)
         except Exception as e:
             print("Failed to load state: {}".format(e))
 
         #: Hook up observers
         for name, member in self.members().items():
-            if not member.metadata or not member.metadata.get('persist', True):
+            if not member.metadata or member.metadata.get('persist', True):
                 self.observe(name, self._save_state)
 
     def _save_state(self, change):
         """ Try to save the plugin state """
-        if change['type'] == 'update':
+        if change['type'] in ['update', 'container']:
             try:
                 print("Saving state due to change: {}".format(change))
 
@@ -268,7 +263,7 @@ class EditorPlugin(Plugin):
                         del state[k]
                 state = pickle.dumps(state)
 
-                with open('editor.db', 'wb') as f:
+                with open('editor.db', 'w') as f:
                     f.write(state)
             except Exception as e:
                 print("Failed to save state:")
@@ -277,7 +272,7 @@ class EditorPlugin(Plugin):
     def _unbind_observers(self):
         """ Setup state observers """
         for name, member in self.members().items():
-            if not member.metadata or not member.metadata.get('persist', True):
+            if not member.metadata or member.metadata.get('persist', True):
                 self.unobserve(name, self._save_state)
 
     # -------------------------------------------------------------------------
@@ -417,39 +412,93 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Editor API
     # -------------------------------------------------------------------------
-    def _default_area_layout(self):
-        return AreaLayout(
-            TabLayout(*['editor-item-{}'.format(doc.name)
-                        for doc in self.documents]),
-            dock_bars=[
-                DockBarLayout(
-                    'modules-item',
-                    'files-item',
-                    'inspection-item',
-                    position='left',
-                ),
-                DockBarLayout(
-                    'console-item',
-                    'ipython-item',
-                    position='bottom',
-                ),
-            ],
-        )
-
     @observe('documents')
     def _update_area_layout(self, change):
-        if change['type'] != 'update':
+        """ When a document is opened or closed, add or remove it
+        from the currently active TabLayout.
+        
+        The layout update is deferred so it fires after the items are
+        updated by the Looper.
+        
+        """
+        if change['type'] == 'create':
             return
-        deferred_call(
-            lambda: setattr(self, 'area_layout', self._default_area_layout()))
+
+        #: Get the dock area
+        area = self.get_dock_area()
+
+        #: Refresh the dock items
+        #area.looper.iterable = self.documents[:]
+
+        #: Determine what change to apply
+        removed = set()
+        added = set()
+        if change['type'] == 'container':
+            op = change['operation']
+            if op in ['append', 'insert']:
+                added = set([change['item']])
+            elif op == 'extend':
+                added = set(change['items'])
+            elif op in ['pop', 'remove']:
+                removed = set([change['item']])
+        elif change['type'] == 'update':
+            old = set(change['oldvalue'])
+            new = set(change['value'])
+
+            #: Determine which changed
+            removed = old.difference(new)
+            added = new.difference(old)
+
+        #: Update operations to apply
+        ops = []
+
+        #: Remove any old items
+        for doc in removed:
+            ops.append(RemoveItem(
+                item='editor-item-{}'.format(doc.name)
+            ))
+
+        #: Add any new items
+        for doc in added:
+            targets = ['editor-item-{}'.format(d.name) for d in self.documents
+                       if d.name != doc.name]
+            item = EditorItem(area, plugin=self, doc=doc)
+            ops.append(InsertTab(
+                item=item.name,
+                target=targets[0] if targets else ''
+            ))
+
+        #: Now apply all layout update operations
+        print("Updating dock area: {}".format(ops))
+        area.update_layout(ops)
+        self.save_dock_area(change)
+
+    def save_dock_area(self, change):
+        """ Save the dock area """
+        self._area_saves_pending += 1
+
+        def do_save():
+            self._area_saves_pending -= 1
+            if self._area_saves_pending != 0:
+                return
+            #: Now save it
+            ui = self.workbench.get_plugin('enaml.workbench.ui')
+            ui.workspace.save_area()
+        timed_call(350, do_save)
 
     def get_dock_area(self):
         ui = self.workbench.get_plugin('enaml.workbench.ui')
-        return ui.workspace.content.find('editor')
+        return ui.workspace.content.find('dock_area')
 
     def get_editor(self):
+        """ Get the editor item for the currently active document 
+        
+        """
         item = 'editor-item-{}'.format(self.active_document.name)
-        return self.get_dock_area().find(item).children[0].editor
+        dock_item = self.get_dock_area().find(item)
+        if not dock_item:
+            return None
+        return dock_item.children[0].editor
 
     def get_terminal(self):
         return self.get_dock_area().terminal
@@ -472,15 +521,6 @@ class EditorPlugin(Plugin):
     def _default_active_document(self):
         return self.documents[0]
 
-    # def _observe_documents(self, change):
-    #     """ When a document is added or removed insert or remove it from
-    #     the dock area.
-    #     """
-    #     if change['type'] == 'update':
-    #         area = self.get_dock_area()
-    #         op = InsertItem()
-    #         area.update_layout(op)
-
     def new_file(self, event):
         """ Create a new file with the given path
         
@@ -489,9 +529,7 @@ class EditorPlugin(Plugin):
         if not path:
             return
         doc = Document(name=path)
-        docs = self.documents[:]
-        docs.append(doc)
-        self.documents = docs
+        self.documents.append(doc)
         self.active_document = doc
 
     def close_file(self, event):
@@ -500,22 +538,18 @@ class EditorPlugin(Plugin):
         are open this only closes the first one it finds.
         
         """
-        path = event.parameters.get('path')
-        if not path:
-            return
+        path = event.parameters.get('path', self.active_document.name)
         docs = self.documents
         opened = [d for d in docs if d.name == path]
         if not opened:
             return
         print("Closing '{}'".format(path))
         doc = opened[0]
-        docs.remove(doc)
+        self.documents.remove(doc)
 
         #: If we closed the active document
         if self.active_document == doc:
             self.active_document = docs[0] if docs else Document()
-
-        self.documents = docs
 
     def open_file(self, event):
         """ Open a file from the local filesystem 
@@ -534,12 +568,11 @@ class EditorPlugin(Plugin):
         doc = Document(name=path, unsaved=False)
         with open(path) as f:
             doc.source = f.read()
-        docs = self.documents[:]
-        docs.append(doc)
-        self.documents = docs
+        self.documents.append(doc)
         self.active_document = doc
         editor = self.get_editor()
-        editor.set_text(doc.source)
+        if editor:
+            editor.set_text(doc.source)
 
     def save_file(self, event):
         """ Save the currently active document to disk
@@ -696,37 +729,45 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Code inspection API
     # -------------------------------------------------------------------------
-    def autocomplete(self, text):
+    def autocomplete(self, source, cursor):
         """ Return a list of autocomplete suggestions for the given text.
         Results are based on the modules loaded.
         
         Parameters
         ----------
-            text: str
-                Source to autocomplete
+            source: str
+                Source code to autocomplete
+            cursor: (line, column)
+                Position of the editor
         Return
         ------
             result: list
                 List of autocompletion strings
         """
-        suggestions = []
         try:
-            lines = text.split("\n")
-            line = lines[-1]
-            print(line)
-            if line.split()[0] in ["import", "from"]:
-                suggestions = [m for m in self.modules]
-            elif line.split(".")[0] in self.modules.keys():
-                mod = line.split(".")[0]
-                suggestions = ["{}.{}".format(mod, attr)
-                               for attr in self.modules[mod]
-                               if not attr.startswith("__")]
-        except Exception as e:
-            print("Error getting suggestions for '{}': {}".format(text, e))
-        finally:
-            print("Suggestions for '{}' are {}".format(text, suggestions))
-            #self.active_document.autocompletions = suggestions
-            return suggestions
+            #: Use jedi to get suggestions
+            line, column = cursor
+            script = jedi.Script(source, line+1, column)
+
+            #: Get suggestions
+            results = []
+            for c in script.completions():
+                results.append(c.name)
+
+                #: Try to get a signature if the docstring matches
+                #: something Scintilla will use (ex "func(..." or "Class(...")
+                #: Scintilla ignores docstrings without a comma in the args
+                if c.type in ['function', 'class', 'instance']:
+                    docstring = c.docstring()
+                    if docstring.startswith("{}(".format(c.name)):
+                        results.append(docstring)
+                        continue
+
+            return results
+        except Exception:
+            #: Autocompletion may fail for random reasons so catch all errors
+            #: as we don't want the editor to crash because of this
+            return []
 
 
 

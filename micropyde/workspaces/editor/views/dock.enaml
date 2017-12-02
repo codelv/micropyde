@@ -26,8 +26,8 @@ from enaml.widgets.dock_events import DockItemEvent
 
 from micropyde.utils import load_icon
 
-from ..utils import PickableDockArea as DockArea
-from ..utils import PickableDockItem as DockItem
+from micropyde.workspaces.editor.utils import PickableDockArea as DockArea
+from micropyde.workspaces.editor.utils import PickableDockItem as DockItem
 from .api import (
     TerminalView, ModuleView, FileBrowserView, CodeInspectionView,
     FlashDialog, EraseDialog, BoardInfoDialog, EditorView
@@ -76,11 +76,28 @@ def get_document(documents, path):
     return [d for d in documents if d.name==path]
 
 
+enamldef DockEditorItem(DockItem): item:
+    attr doc
+    attr plugin
+    name = 'editor-item-{}'.format(doc.name)
+    title << format_title(plugin.documents, doc, doc.name, doc.unsaved)
+    closed ::
+        core = plugin.workbench.get_plugin("enaml.workbench.core")
+        core.invoke_command('micropyde.editor.close_file',
+                            {'path':doc.name})
+    stretch = 4
+    icon = load_icon("script_code")
+    EditorView:
+        plugin << item.plugin
+        model << doc
+
+
 enamldef DockView(DockArea): view:
-    name = 'editor'
+    name = 'dock_area'
     alias terminal
     attr workbench
-    attr plugin = workbench.get_plugin('micropyde.editor')
+    alias looper
+    attr plugin << workbench.get_plugin('micropyde.editor') if workbench else None
     dock_events_enabled = True
     dock_event ::
         event = change['value']
@@ -92,9 +109,11 @@ enamldef DockView(DockArea): view:
             matches = [d for d in plugin.documents if d.name==path]
             if matches:
                 plugin.active_document = matches[0]
+        else:
+            plugin.save_dock_area(change)
 
     #: Set the initial layout
-    layout << AreaLayout(
+    layout = AreaLayout(
         TabLayout(*['editor-item-{}'.format(doc.name)
                     for doc in plugin.documents]),
         dock_bars=[
@@ -111,23 +130,11 @@ enamldef DockView(DockArea): view:
             ),
         ],
     )
-    #layout >> plugin.area_layout
-
-    Looper:
-        iterable << plugin.documents
-        DockItem:
-            attr doc = loop_item
-            name = 'editor-item-{}'.format(doc.name)
-            title << format_title(plugin.documents, doc, doc.name, doc.unsaved)
-            closed ::
-                core = plugin.workbench.get_plugin("enaml.workbench.core")
-                core.invoke_command('micropyde.editor.close_file',
-                                    {'path':doc.name})
-            stretch = 4
-            icon = load_icon("script_code")
-            EditorView:
-                plugin << view.plugin
-                model << doc
+    Looper: looper:
+        iterable = plugin.documents
+        DockEditorItem:
+            doc << loop_item
+            plugin << view.plugin
     DockItem: module_index:
         name = 'modules-item'
         title = 'Modules'

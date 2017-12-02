@@ -3,9 +3,20 @@ import os
 import json
 from glob import glob
 
+COPYRIGHT = """
+#------------------------------------------------------------------------------
+# Copyright (c) 2017, Nucleic Development Team.
+#
+# Distributed under the terms of the Modified BSD License.
+#
+# The full license is in the file COPYING.txt, distributed with this software.
+#------------------------------------------------------------------------------
+""".strip()
+
 
 def generate_themes(path):
-    """ Generate the code for the *.css themes within the given path.
+    """ Generate the Scintilla code for the *.css themes within the given path.
+    
     """
     themes = []
     for f in sorted(glob("{}/*.css".format(path))):
@@ -15,19 +26,36 @@ def generate_themes(path):
             print("Error generating {}: {}".format(f, e))
 
     names = []
+    if not os.path.exists('themes'):
+        os.makedirs('themes')
+
+    #: Create a file with each
     for t in themes:
         name = t['settings']['name']
         names.append(name)
-        print("\n{}_THEME = {}".format(name.upper(), json.dumps(t, indent=4)))
-        print("{}_THEME['enaml'] = {}_THEME['python']".format(
-            name.upper(), name.upper()))
+        with open('themes/{}.py'.format(name), 'w') as f:
+            f.write(COPYRIGHT+"\n")
+            f.write("\n{}_THEME = {}".format(name.upper(),
+                                             json.dumps(t, indent=4)))
+            f.write("\n\n")
+            f.write("{}_THEME['enaml'] = {}_THEME['python']\n".format(
+                    name.upper(), name.upper()))
 
-    print("THEMES = {")
-    for n in sorted(names):
-        print("    '{}': {}_THEME,".format(n, n.upper()))
-    print("}")
+    #: Add idle
+    names.append('idle')
+
+    #: Generate the themes api
+    names.sort()
+    with open('themes/__init__.py', 'w') as f:
+        f.write(COPYRIGHT+"\n")
+        for n in names:
+            f.write("from .{} import {}_THEME\n".format(n, n.upper()))
+        f.write("\n\n")
+        f.write("THEMES = {\n")
+        for n in names:
+            f.write("    '{}': {}_THEME,\n".format(n, n.upper()))
+        f.write("}\n")
     return themes
-
 
 
 def scintilla_theme_from_pygment(path):
@@ -36,7 +64,7 @@ def scintilla_theme_from_pygment(path):
     """
     data = parse_pygments_css_theme(path)
     fg = data["General"]["styles"].get('color', '#000000')
-    bg = data["General"]["styles"].get('background', '#FFFFFF')
+    bg = data["General"]["styles"].get('paper', '#FFFFFF')
 
     if "Generic" in data:
         fg = data["Generic"]["styles"]['color']
@@ -55,50 +83,19 @@ def scintilla_theme_from_pygment(path):
             "name": os.path.splitext(os.path.split(path)[-1])[0],
         },
         "python": {
-            "class_name": {
-                "color": data["Name.Class"]["styles"].get('color', fg),
-            },
-            "comment": {
-                "color": data["Comment"]["styles"].get('color', fg),
-            },
-            "comment_block": {
-                "color": data["Comment.Multiline"]["styles"].get('color', fg),
-            },
-            "decorator": {
-                "color": decorator["styles"].get('color', fg)
-            },
-            "double_quoted_string": {
-                "color": data["Literal.String.Double"]["styles"].get('color',
-                                                                     fg)
-            },
-            "function_method_name": {
-                "color": data["Name.Function"]["styles"].get('color', fg)
-            },
-            "highlighted_identifier": {
-                "paper": data["HighlightedLine"]["styles"]['background-color']
-            },
-            "keyword": {
-                "color": data["Keyword"]["styles"].get('color', fg)
-            },
-            "operator": {
-                "color": operator["styles"].get('color', fg)
-            },
-            "unclosed_string": {
-                "color": data["Error"]["styles"].get('color', fg),
-                "paper": data["Error"]["styles"].get('background-color', bg),
-            },
-            "single_quoted_string": {
-                "color": data["Literal.String.Single"]["styles"].get('color',
-                                                                     fg)
-            },
-            "triple_double_quoted_string": {
-                "color": data["Literal.String.Double"]["styles"].get('color',
-                                                                     fg)
-            },
-            "triple_single_quoted_string": {
-                "color": data["Literal.String.Single"]["styles"].get('color',
-                                                                     fg)
-            }
+            "class_name": data["Name.Class"]["styles"],
+            "comment": data["Comment"]["styles"],
+            "comment_block": data["Comment.Multiline"]["styles"],
+            "decorator": decorator["styles"],
+            "double_quoted_string": data["Literal.String.Double"]["styles"],
+            "function_method_name": data["Name.Function"]["styles"],
+            "highlighted_identifier": data["HighlightedLine"]["styles"],
+            "keyword": data["Keyword"]["styles"],
+            "operator": operator["styles"],
+            "unclosed_string": data["Error"]["styles"],
+            "single_quoted_string": data["Literal.String.Single"]["styles"],
+            "triple_double_quoted_string": data["Literal.String.Double"]["styles"],
+            "triple_single_quoted_string": data["Literal.String.Single"]["styles"],
         }
     }
 
@@ -124,13 +121,26 @@ def parse_pygments_css_theme(path):
     groups.append((hll, ('', hll.split("{")[1].split("}")[0].strip() ,
                          'HighlightedLine')))
 
+    def parse_styles(source):
+        styles = {}
+        for style in source.split(";"):
+            if not style:
+                continue
+
+            #: Strip
+            k, v = [it.strip() for it in style.split(":")]
+
+            #: Replace it
+            if k in ['background', 'background-color']:
+                k = 'paper'
+
+            styles[k] = v
+        return styles
+
     theme = {g[-1]: {
         'name': g[0],
         'source': l,
-        'styles': {
-            k.split(":")[0].strip(): k.split(":")[1].strip()
-            for k in g[1].split(";") if k
-        }
+        'styles': parse_styles(g[1]),
     } for l, g in groups}
     return theme
 

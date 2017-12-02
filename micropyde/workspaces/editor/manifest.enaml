@@ -15,6 +15,7 @@ from enaml.workbench.api import Extension, PluginManifest
 from enaml.workbench.core.api import Command
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
 
+
 with enaml.imports():
     from .views.api import (
         NewFileDialog, EraseDialog, FlashDialog, BoardInfoDialog,
@@ -22,16 +23,12 @@ with enaml.imports():
     )
     from .views.dock import DockView
 
+
 def create_new_area():
-    """ Create a new pickable dock area with two child panes.
+    """ Create a new pickable dock area
 
     """
-    area = DockView()
-    # area.editor.set_text(textwrap.dedent("""
-    # print("Hello world!")
-    #
-    # """))
-    return area
+    return DockView()
 
 
 def plugin_command(name, event):

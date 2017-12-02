@@ -7,11 +7,11 @@
 #------------------------------------------------------------------------------
 from __future__ import print_function
 
-import pickle
+import jsonpickle as pickle
 
 from atom.api import Unicode
 
-from enaml.widgets.api import Container, DockArea
+from enaml.widgets.api import Container
 from enaml.workbench.ui.api import Workspace
 
 import enaml
@@ -34,10 +34,11 @@ class EditorWorkspace(Workspace):
 
         """
         self.content = Container(padding=0)
-        self.load_area()
         manifest = EditorManifest()
         self._manifest_id = manifest.id
         self.workbench.register(manifest)
+        self.workbench.get_plugin('micropyde.editor')
+        self.load_area()
         self.load_plugins()
 
     def load_plugins(self):
@@ -65,9 +66,14 @@ class EditorWorkspace(Workspace):
         """ Save the dock area for the workspace.
 
         """
-        area = self.content.find('editor')
-        with open('state.db', 'wb') as f:
-            f.write(pickle.dumps(area))
+        print("Saving dock area")
+        area = self.content.find('dock_area')
+        try:
+            with open('editor.area.db', 'w') as f:
+                f.write(pickle.dumps(area))
+        except Exception as e:
+            print("Error saving dock area: {}".format(e))
+            return e
 
     def load_area(self):
         """ Load the dock area into the workspace content.
@@ -75,11 +81,14 @@ class EditorWorkspace(Workspace):
         """
         area = None
         try:
-            with open('state.db', 'rb') as f:
+            with open('editor.area.db', 'r') as f:
                 area = pickle.loads(f.read())
         except Exception as e:
             print(e)
         if area is None:
+            print("Creating new area")
             area = create_new_area()
+        else:
+            print("Loading existing doc area")
         area.set_parent(self.content)
         area.workbench = self.workbench
