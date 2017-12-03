@@ -12,6 +12,7 @@ if sys.platform == 'win32':
 from enaml.core.api import Looper
 from enaml.layout.api import align, hbox, spacer
 from enaml.core.api import Conditional
+from enaml.stdlib.mapped_view import MappedView
 from enaml.stdlib.dialog_buttons import DialogButtonBox, DialogButton
 from enaml.stdlib.task_dialog import (
     TaskDialogBody, TaskDialogCommandArea,
@@ -19,17 +20,64 @@ from enaml.stdlib.task_dialog import (
     TaskDialogIconArea, TaskDialogInstructionArea, TaskDialogStyleSheet
 )
 from enaml.widgets.api import (
-    Dialog, Field, Label, PushButton, RadioButton, CheckBox, Html,
-    ProgressBar, ObjectCombo, Form, Container, SpinBox, FileDialogEx,
-    Splitter, SplitItem
+    Dialog, Field, Label, PushButton, Form, ObjectCombo, SplitItem, Splitter,
+    Container, SpinBox, FileDialogEx,
+
 )
-from serial.tools.list_ports import comports
-from twisted.internet.protocol import ProcessProtocol
-from twisted.internet.defer import Deferred
 from enamlx.widgets.api import TreeView, TreeViewItem
+from .themes import THEMES
 
 enamldef SettingsPage(Container):
-    pass
+    attr model
+
+
+enamldef EditorSettingsPage(SettingsPage):
+    Label:
+        text = "Editor"
+    Form:
+        Label:
+            text = "Zoom"
+        SpinBox:
+            value := plugin.zoom
+            minimum = -10
+            maximum = 20
+        Label:
+            text = "Theme"
+        ObjectCombo:
+            items = list(THEMES.keys())
+            selected := plugin.theme
+
+    Label:
+        text = "Micropython SDK"
+    Form:
+        Label:
+            text = "Board"
+        ObjectCombo:
+            items = list(plugin.get_member('upy_board').items)
+            selected := plugin.upy_board
+        Label:
+            text = "Micropython"
+        Label:
+            text = ""
+        Field:
+            text := plugin.upy_path
+        PushButton:
+            text = "Browse"
+            clicked :: FileDialogEx.get_existing_directory(
+                            self,
+                            current_path=plugin.upy_path)
+        Label:
+            text = "Micropython Modules"
+        Label:
+            text = ""
+        Field:
+            text := plugin.upy_lib_path
+        PushButton:
+            text = "Browse"
+            clicked :: FileDialogEx.get_existing_directory(
+                            self,
+                            current_path=plugin.upy_lib_path)
+
 
 enamldef SettingsDialog(Dialog): dialog:
     title = 'Settings'
@@ -58,17 +106,18 @@ enamldef SettingsDialog(Dialog): dialog:
                         TreeView: tree:
                             horizontal_headers = ['Setting']
                             horizontal_stretch = True
-                            items = ['Editor']
+                            show_horizontal_header = False
+                            items << plugin.settings_items
                             Looper:
                                 iterable << tree.items
                                 TreeViewItem:
-                                    text = loop_item
+                                    text = loop_item.settings_title
+                                    clicked :: settings.model = loop_item
                 SplitItem:
                     stretch = 4
-                    Container: content:
-                        padding = 0
-                        Html:
-                            source = "Some Content"
+                    MappedView: settings:
+                        model = plugin
+                        typemap << plugin.settings_pages
 
         TaskDialogCommandArea:
             constraints = [

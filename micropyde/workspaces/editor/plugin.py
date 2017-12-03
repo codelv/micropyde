@@ -13,15 +13,14 @@ import hashlib
 import esptool
 import textwrap
 import traceback
+from glob import glob
 
 from atom.api import (Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
-                      ContainerList, observe)
+                      ContainerList, ForwardSubclass, observe)
 
 from enaml.workbench.api import Plugin
-from enaml.layout.api import (
-    AreaLayout, TabLayout, DockBarLayout, InsertTab, InsertItem, RemoveItem
-)
-from enaml.application import timed_call, deferred_call
+from enaml.layout.api import InsertTab, RemoveItem
+from enaml.application import timed_call
 
 from micropyde.utils import Model
 from micropyde.workspaces.editor import inspection
@@ -39,6 +38,14 @@ def EditorItem(*args, **kwargs):
     with enaml.imports():
         from micropyde.workspaces.editor.views.dock import DockEditorItem
     return DockEditorItem(*args, **kwargs)
+
+
+def get_settings_page():
+    with enaml.imports():
+        from micropyde.workspaces.editor.views.settings import (
+            EditorSettingsPage)
+
+    return EditorSettingsPage
 
 
 class QueryProtocol(LineReceiver):
@@ -204,8 +211,24 @@ class EditorPlugin(Plugin):
     scanning_progress = Int().tag(persist=False)
     scanning_status = Unicode().tag(persist=False)
 
-    #: Theme
+    #: Editor settings
     theme = Enum('friendly', *THEMES.keys())
+    zoom = Int(0)  #: Relative to default
+
+    #: TODO: Detect from upy_path
+    upy_board = Enum('esp8266', 'pyb', 'stm32', 'teensy', 'unix',
+                     'windows', 'cc3200', 'zephyr', 'pic16bit',
+                     'minimal')
+    upy_path = Unicode(os.path.abspath('../micropython/micropython/'))
+    upy_lib_path = Unicode(os.path.abspath('../micropython/micropython-lib/'))
+    project_path = Unicode(os.path.abspath('.'))
+    sys_path = List().tag(persist=False)
+
+    #: Settings pages
+    settings_title = Unicode("Editor")
+    settings_pages = Dict().tag(persist=False)
+    settings_page = ForwardSubclass(get_settings_page).tag(persist=False)
+    settings_items = List().tag(persist=False)
 
     #: Dock area layout
     _area_saves_pending = Int().tag(persist=False)
@@ -226,6 +249,13 @@ class EditorPlugin(Plugin):
         """ Unload any state observers when the plugin stops"""
         self._unbind_observers()
         EditorPlugin._instance = None
+
+    def _default_settings_pages(self):
+        """ Available settings pages """
+        return {EditorPlugin: self.settings_page}
+
+    def _default_settings_items(self):
+        return [self]
 
     # -------------------------------------------------------------------------
     # State API
@@ -729,6 +759,28 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Code inspection API
     # -------------------------------------------------------------------------
+    def _default_sys_path(self):
+        """ Determine the micropython SDK sys path"""
+        results = [self.project_path, self.upy_lib_path, self.upy_path]
+
+        #: Add from module ports
+        paths = glob('{}/ports/{}/modules/*.py'.format(self.upy_path,
+                                                          self.upy_board),
+                     recursive=True)
+        print(paths)
+        results += [os.path.dirname(s) for s in paths]
+
+        #: Add modules from libs
+        paths = glob('{}/**/setup.py'.format(self.upy_lib_path),
+                     recursive=True)
+        results += [os.path.dirname(s) for s in paths]
+        return list(set(results))
+
+    @observe('upy_path', 'upy_lib_path', 'project_path', 'upy_board')
+    def _refresh_sys_path(self, change):
+        if change['type'] == 'update':
+            self.sys_path = self._default_sys_path()
+
     def autocomplete(self, source, cursor):
         """ Return a list of autocomplete suggestions for the given text.
         Results are based on the modules loaded.
@@ -747,7 +799,8 @@ class EditorPlugin(Plugin):
         try:
             #: Use jedi to get suggestions
             line, column = cursor
-            script = jedi.Script(source, line+1, column)
+            script = jedi.Script(source, line+1, column,
+                                 sys_path=self.sys_path)
 
             #: Get suggestions
             results = []
@@ -759,6 +812,10 @@ class EditorPlugin(Plugin):
                 #: Scintilla ignores docstrings without a comma in the args
                 if c.type in ['function', 'class', 'instance']:
                     docstring = c.docstring()
+
+                    #: Remove self arg
+                    docstring = docstring.replace("(self,", "(")
+
                     if docstring.startswith("{}(".format(c.name)):
                         results.append(docstring)
                         continue

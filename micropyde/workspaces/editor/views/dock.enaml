@@ -89,7 +89,7 @@ enamldef DockEditorItem(DockItem): item:
     icon = load_icon("script_code")
     EditorView:
         plugin << item.plugin
-        model << doc
+        model << item.doc
 
 
 enamldef DockView(DockArea): view:
@@ -97,7 +97,7 @@ enamldef DockView(DockArea): view:
     alias terminal
     attr workbench
     alias looper
-    attr plugin << workbench.get_plugin('micropyde.editor') if workbench else None
+    attr plugin
     dock_events_enabled = True
     dock_event ::
         event = change['value']

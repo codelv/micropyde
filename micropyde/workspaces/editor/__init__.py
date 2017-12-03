@@ -92,3 +92,4 @@ class EditorWorkspace(Workspace):
             print("Loading existing doc area")
         area.set_parent(self.content)
         area.workbench = self.workbench
+        area.plugin = self.workbench.get_plugin('micropyde.editor')

@@ -8,7 +8,7 @@
 import os
 from enaml.widgets.api import Container, Timer
 from enaml.scintilla.api import Scintilla
-from .themes import THEMES, FRIENDLY_THEME
+from micropyde.workspaces.editor.views.themes import THEMES
 
 
 def detect_syntax(path):
@@ -34,7 +34,7 @@ enamldef EditorView(Container): view:
     attr model
     Scintilla: editor:
         syntax = 'enaml'#detect_syntax(model.name)
-        theme  << THEMES[plugin.theme]# if model.name else THEMES['idle']
+        theme  << THEMES[plugin.theme] if plugin else THEMES['tango']
         settings = {
             "tab_width": 4,
             "use_tabs": False,
@@ -46,8 +46,9 @@ enamldef EditorView(Container): view:
             "show_line_numbers": True,
         }
         autocomplete = 'all'
-        activated :: set_text(model.source)
+        activated :: set_text(model.source) if model else None
         text_changed :: timer.start()
+        zoom << plugin.zoom if plugin else 0
         Timer: timer:
             interval = 350
             single_shot = True
