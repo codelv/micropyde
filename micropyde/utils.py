@@ -11,16 +11,29 @@ from atom.api import Atom
 from enaml.image import Image
 from enaml.icon import Icon, IconImage
 
+_IMAGE_CACHE = {}
+
 
 def icon_path(name):
+    """ Load an icon from the res/icons folder using the name 
+    without the .png
+    
+    """
     path = os.path.dirname(__file__)
     return os.path.join(path, 'res', 'icons', '%s.png' % name)
 
 
 def load_image(name):
-    with open(icon_path(name), 'rb') as f:
-        data = f.read()
-    return Image(data=data)
+    """ Get and cache an enaml Image for the given icon name.
+    
+    """
+    path = icon_path(name)
+    global _IMAGE_CACHE
+    if path not in _IMAGE_CACHE:
+        with open(path, 'rb') as f:
+            data = f.read()
+        _IMAGE_CACHE[path] = Image(data=data)
+    return _IMAGE_CACHE[path]
 
 
 def load_icon(name):

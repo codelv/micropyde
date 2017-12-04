@@ -120,13 +120,16 @@ enamldef DockView(DockArea): view:
             DockBarLayout(
                 'modules-item',
                 'files-item',
-                'inspection-item',
                 position='left',
             ),
             DockBarLayout(
                 'console-item',
                 'ipython-item',
                 position='bottom',
+            ),
+            DockBarLayout(
+                'inspection-item',
+                position='right',
             ),
         ],
     )

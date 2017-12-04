@@ -7,9 +7,9 @@
 #------------------------------------------------------------------------------
 import os
 from enaml.widgets.api import Container, Timer
-from enaml.scintilla.api import Scintilla
+from enaml.scintilla.api import Scintilla, ScintillaIndicator, ScintillaMarker
 from micropyde.workspaces.editor.views.themes import THEMES
-
+from micropyde.utils import load_image
 
 def detect_syntax(path):
     p, ext = os.path.splitext(path)
@@ -25,6 +25,36 @@ def detect_syntax(path):
         return 'cpp'
     elif file_type in ['sh']:
         return 'bash'
+
+
+def create_indicators(errors):
+    results = []
+    try:
+        for e in errors:
+            tag = e.split(":")[0:3]
+            if len(tag) < 2:
+                continue
+            try:
+                l = int(tag[1])
+            except ValueError:
+                continue
+
+            color = "#FF0000"
+            try:
+                c = int(tag[2])
+                start = (l-1, 0)
+                stop = (l-1, c)
+            except ValueError:
+                start = (l-1, 0)
+                stop = (l, 0)
+                color = "#FFFF00"
+
+            results.append(ScintillaIndicator(
+                start=start, stop=stop, style="squiggle", color=color,
+            ))
+    except Exception as e:
+        print(e)
+    return results
 
 
 enamldef EditorView(Container): view:
@@ -49,6 +79,13 @@ enamldef EditorView(Container): view:
         activated :: set_text(model.source) if model else None
         text_changed :: timer.start()
         zoom << plugin.zoom if plugin else 0
+        indicators << create_indicators(model.errors) if model else []
+        markers << [ScintillaMarker(
+                        line=i.start[0],
+                        image=load_image("exclamation" if i.color=="#FF0000"
+                                         else "error"))
+                        for i in indicators]
+        #warnings
         Timer: timer:
             interval = 350
             single_shot = True

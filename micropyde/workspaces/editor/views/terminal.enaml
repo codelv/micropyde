@@ -65,13 +65,19 @@ enamldef TerminalView(Container): view:
     func write_text(text):
         if not text.endswith("\r\n"):
             text += "\r\n"
-        if not text.startswith("\r\n"):
-            text = "\r\n" + text
-        #: Enter paste mode
-        plugin.com_port.write(b'\x05')
-        #: Send text
-        plugin.com_port.write(text.encode())
-        plugin.com_port.write(b'\x04')
+        #if not text.startswith("\r\n"):
+        #    text = "\r\n" + text
+        lines = text.split("\r\n")
+        if len(lines)>2:
+            #: Enter paste mode
+            plugin.com_port.write(b'\x05')
+            #: Send text
+            plugin.com_port.write(text.encode())
+            plugin.com_port.write(b'\x04')
+        else:
+            #: Send text as is
+            plugin.com_port.write(text.encode())
+
         to_send.set_text("")
 
     constraints = [
@@ -144,7 +150,7 @@ enamldef TerminalView(Container): view:
                 Scintilla: to_send:
                     syntax = "python"
                     theme << THEMES[plugin.theme]
-                    enabled << opened
+                    #enabled << opened
                     settings = {
                         "tab_width": 4,
                         "use_tabs": False,

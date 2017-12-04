@@ -823,7 +823,7 @@ class EditorPlugin(Plugin):
             return results
         except Exception:
             #: Autocompletion may fail for random reasons so catch all errors
-            #: as we don't want the editor to crash because of this
+            #: as we don't want the editor to exit because of this
             return []
 
 
