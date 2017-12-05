@@ -11,7 +11,8 @@ from enaml.workbench.ui.api import ActionItem, Branding, MenuItem, ItemGroup
 
 
 def window_factory(workbench):
-    """ A factory function which creates the default WorkbenchWindow.
+    """ A factory function which creates the default WorkbenchWindow
+    with a reasonable initial size.
 
     """
     import enaml

@@ -16,7 +16,9 @@ from enaml.workbench.ui.api import Workspace
 
 import enaml
 with enaml.imports():
-    from .manifest import EditorManifest, create_new_area
+    from micropyde.plugins.editor.manifest import (
+        EditorManifest, create_new_area
+    )
 
 
 class EditorWorkspace(Workspace):
@@ -46,8 +48,12 @@ class EditorWorkspace(Workspace):
         plugins = []
         with enaml.imports():
             #: TODO autodiscover these
-            from micropyde.plugins.pozetron.manifest import Manifest
-            plugins.append(Manifest)
+            from micropyde.plugins.board.manifest import BoardManifest
+            from micropyde.plugins.esp.manifest import EspManifest
+            from micropyde.plugins.pozetron.manifest import PozetronManifest
+            plugins.append(BoardManifest)
+            plugins.append(EspManifest)
+            plugins.append(PozetronManifest)
 
         for Manifest in plugins:
             self.workbench.register(Manifest())
@@ -81,8 +87,9 @@ class EditorWorkspace(Workspace):
         """
         area = None
         try:
-            with open('editor.area.db', 'r') as f:
-                area = pickle.loads(f.read())
+            #with open('editor.area.db', 'r') as f:
+            #    area = pickle.loads(f.read())
+            pass #: TODO:
         except Exception as e:
             print(e)
         if area is None:

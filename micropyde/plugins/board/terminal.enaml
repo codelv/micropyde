@@ -12,9 +12,10 @@ from enaml.widgets.api import (
     Container, ObjectCombo, PushButton, Html, Field, Timer, Splitter, SplitItem
 )
 from enaml.scintilla.api import Scintilla
-from .themes import THEMES
-from micropyde.utils import load_icon
+from micropyde.plugins.editor.views.themes import THEMES
+from micropyde.core import load_icon
 from enamlx.widgets.api import KeyEvent
+from micropyde.workbench import MicropydeWorkbench
 
 
 class TerminalProtocol(Protocol):
@@ -54,31 +55,38 @@ enamldef TerminalView(Container): view:
     attr protocol: TerminalProtocol
     alias console
     attr plugin
+    attr device << MicropydeWorkbench.instance().get_plugin("micropyde.board").board
     attr opened = False
+
+
+    func on_connect(result):
+        if result:
+            device.write(b"help()\r\n")
+
     func toggle_port():
         was_open = opened
-        plugin.close_port()
+        device.disconnect()
         if not was_open:
             view.protocol = TerminalProtocol(view)
-            if plugin.open_port(view.protocol):
-                plugin.com_port.write(b"help()\r\n")
+            device.connect(view.protocol).addCallback(on_connect)
+
     func write_text(text):
+        lines = text.split("\n")
         if not text.endswith("\r\n"):
             text += "\r\n"
         #if not text.startswith("\r\n"):
         #    text = "\r\n" + text
-        lines = text.split("\r\n")
         if len(lines)>2:
             #: Enter paste mode
-            plugin.com_port.write(b'\x05')
+            device.write(b'\x05')
             #: Send text
-            plugin.com_port.write(text.encode())
-            plugin.com_port.write(b'\x04')
+            device.write(text.encode())
+            device.write(b'\x04')
         else:
             #: Send text as is
-            plugin.com_port.write(text.encode())
+            device.write(text.encode())
 
-        to_send.set_text("")
+        editor.set_text("")
 
     constraints = [
         vbox(
@@ -86,15 +94,16 @@ enamldef TerminalView(Container): view:
             splitter,
         ),
         align('v_center', ports_cmb,btn_open, btn_refresh, btn_clear),
-        #to_send.height >= 30,
-        #to_send.height <= 50,
+        #editor.height >= 30,
+        #editor.height <= 50,
     ]
     ObjectCombo: ports_cmb:
-        items << ports
+        items << device.available_connections
+        to_string = lambda c:c.name
         selected ::
-            port = change['value']
-            if port:
-                plugin.port = change['value'].device
+            connection = change['value']
+            if connection:
+                device.connection = change['value']
 
     PushButton: btn_open:
         #text << "Close" if opened else "Open"
@@ -109,7 +118,7 @@ enamldef TerminalView(Container): view:
     PushButton: btn_refresh:
         icon = load_icon("arrow_refresh")
         tool_tip = "Refresh ports"
-        clicked :: view.ports = comports()
+        clicked :: device.refresh_connections()
     Splitter: splitter:
         orientation = 'vertical'
         SplitItem:
@@ -142,12 +151,12 @@ enamldef TerminalView(Container): view:
                 padding = 0
                 resist_height = 'weak'
                 constraints = [
-                    hbox(to_send, bbox),
-                    align('v_center', to_send, bbox),
-                    # to_send.height >= 30,
-                    #to_send.height <= 100,
+                    hbox(editor, bbox),
+                    align('v_center', editor, bbox),
+                    # editor.height >= 30,
+                    #editor.height <= 100,
                 ]
-                Scintilla: to_send:
+                Scintilla: editor:
                     syntax = "python"
                     theme << THEMES[plugin.theme]
                     #enabled << opened
@@ -165,18 +174,18 @@ enamldef TerminalView(Container): view:
                         interval = 50
                         single_shot = True
                         timeout ::
-                            text = to_send.get_text()
-                            to_send.autocompletions = plugin.autocomplete(
-                                text, to_send.cursor_position)
+                            text = editor.get_text()
+                            editor.autocompletions = plugin.autocomplete(
+                                text, editor.cursor_position)
                             #: Force trigger
                             if text.endswith("."):
-                                to_send.proxy.widget.autoCompleteFromAll()
+                                editor.proxy.widget.autoCompleteFromAll()
                     KeyEvent:
                         keys = ['shift+return']
                         released ::
-                            text = to_send.get_text()
+                            text = editor.get_text()
                             write_text(text)
-                            to_send.set_text("")
+                            editor.set_text("")
 
                 Container: bbox:
                     PushButton: btn_send:
@@ -184,24 +193,25 @@ enamldef TerminalView(Container): view:
                         tool_tip = "Paste contents into interpreter"
                         enabled << opened
                         clicked ::
-                            text = to_send.get_text()
+                            text = editor.get_text()
                             write_text(text)
-                            to_send.set_text("")
+                            editor.set_text("")
                     PushButton: btn_abort:
                         text << "Abort"
                         enabled << opened
                         tool_tip = "Send Ctrl+C"
-                        clicked :: plugin.com_port.write(b'\x03')
+                        clicked :: device.write(b'\x03')
                     PushButton: btn_raw:
                         text << "Raw"
                         enabled << opened
                         tool_tip = "Send Ctrl+B"
-                        clicked :: plugin.com_port.write(b'\x02')
+                        clicked :: device.write(b'\x02')
                     PushButton: btn_rst:
                         text << "Reset"
                         enabled << opened
                         tool_tip = "Send Ctrl+D"
-                        clicked :: plugin.com_port.write(b'\x04')
+                        clicked :: device.write(b'\x04')
+
 
 
 

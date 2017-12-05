@@ -61,11 +61,3 @@ class PickableDockArea(DockArea):
         self.layout = state['layout']
         self.insert_children(None, state['items'])
 
-
-def async_sleep(ms):
-    """ Sleep for the given duration without blocking. Typically this
-    is used with the inlineCallbacks decorator.
-    """
-    d = Deferred()
-    timed_call(ms, d.callback, True)
-    return d

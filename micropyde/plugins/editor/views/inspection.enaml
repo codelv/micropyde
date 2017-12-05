@@ -8,7 +8,7 @@
 from enaml.widgets.api import Container, Html
 from enaml.widgets.api import Container, PushButton, ProgressBar, Label
 from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
-from micropyde.utils import load_icon
+from micropyde.core import load_icon
 
 
 enamldef CodeInspectionView(Container):

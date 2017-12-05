@@ -1,0 +1,89 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import os
+import enaml
+from enaml.widgets.api import FileDialogEx
+from enaml.workbench.api import Extension, PluginManifest
+from enaml.workbench.core.api import Command
+from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
+
+
+def erase_flash(event):
+    with enaml.imports():
+        from .dialogs import EraseDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.esp')
+    EraseDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def update_firmware(event):
+    with enaml.imports():
+        from .dialogs import FlashDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.esp')
+    path = FileDialogEx.get_open_file_name(
+        ui.window,
+        current_path=plugin.last_path,
+        name_filters=['*.bin','*.ota'])
+
+    if path:
+        plugin.flash_filename = path
+        plugin.last_path = os.path.dirname(path)
+        FlashDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def get_info(event):
+    with enaml.imports():
+        from .dialogs import BoardInfoDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.esp')
+    BoardInfoDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def plugin_factory():
+    from .plugin import EspPlugin
+    return EspPlugin()
+
+
+enamldef EspManifest(PluginManifest):
+    """ The manifest which is registered when the view is loaded.
+
+    This manifest contributes extra menu items to the menu bar and
+    new commands for manipulating the dock area items.
+
+    """
+    id = 'micropyde.esp'
+    factory = plugin_factory
+    Extension:
+        id = 'commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'micropyde.esp.erase_flash'
+            handler = erase_flash
+        Command:
+            id = 'micropyde.esp.update_firmware'
+            handler = update_firmware
+        Command:
+           id = 'micropyde.esp.get_info'
+           handler = get_info
+    Extension:
+        id = 'actions'
+        point = 'enaml.workbench.ui.actions'
+        ActionItem:
+            path = '/board/info'
+            label = 'Board info'
+            command = 'micropyde.esp.get_info'
+        ActionItem:
+            path = '/board/firmware'
+            label = 'Flash firmware...'
+            command = 'micropyde.esp.update_firmware'
+        ActionItem:
+            path = '/board/erase'
+            label = 'Erase flash...'
+            command = 'micropyde.esp.erase_flash'
+

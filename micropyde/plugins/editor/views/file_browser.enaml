@@ -9,7 +9,7 @@ from enaml.core.api import Conditional, Looper
 from enaml.core.dynamic_template import DynamicTemplate
 from enaml.widgets.api import Container, PushButton, ProgressBar, Label, Field
 from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
-from micropyde.utils import load_icon
+from micropyde.core import load_icon
 
 
 template TreeItemLoop(items):

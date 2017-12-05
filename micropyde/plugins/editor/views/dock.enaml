@@ -24,14 +24,14 @@ from enaml.workbench.core.api import Command
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
 from enaml.widgets.dock_events import DockItemEvent
 
-from micropyde.utils import load_icon
+from micropyde.core import load_icon
 
-from micropyde.workspaces.editor.utils import PickableDockArea as DockArea
-from micropyde.workspaces.editor.utils import PickableDockItem as DockItem
+from micropyde.plugins.editor.utils import PickableDockArea as DockArea
+from micropyde.plugins.editor.utils import PickableDockItem as DockItem
 from .api import (
-    TerminalView, ModuleView, FileBrowserView, CodeInspectionView,
-    FlashDialog, EraseDialog, BoardInfoDialog, EditorView
+    ModuleView, FileBrowserView, CodeInspectionView, EditorView
 )
+from micropyde.plugins.board.terminal import TerminalView
 
 def format_title(docs, doc, path, unsaved):
     """ Attempt to format the title using the shortest unique name that

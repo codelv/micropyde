@@ -24,46 +24,6 @@ from enaml.widgets.api import (
 from serial.tools.list_ports import comports
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import Deferred
-from ..plugin import EditorPlugin
-
-enamldef NewFileDialog(Dialog): dialog:
-    title = 'New File'
-    initial_size = (640, 320)
-    attr plugin
-    attr event
-    TaskDialogStyleSheet:
-            pass
-    TaskDialogBody:
-        TaskDialogInstructionArea:
-            Label:
-                style_class = 'task-dialog-instructions'
-                text = 'Create a new file'
-        TaskDialogContentArea:
-            Label:
-                style_class = 'task-dialog-content'
-                text = 'Enter the new file name'
-            Form:
-                Label:
-                    text = "Name"
-                Field: file_name:
-                    submit_triggers = ['auto_sync']
-
-        TaskDialogCommandArea:
-            constraints = [
-                hbox(spacer, btn_yes, btn_no),
-                align('v_center', btn_yes, btn_no),
-            ]
-            PushButton: btn_no:
-                text = "Cancel"
-                clicked :: dialog.close()
-            PushButton: btn_yes:
-                text = "Save"
-                enabled << len(file_name.text) > 1
-                clicked ::
-                    event.parameters['path'] = file_name.text
-                    plugin.new_file(event)
-                    dialog.close()
-
 
 
 class FlashProcessProtocol(ProcessProtocol):
@@ -117,8 +77,7 @@ enamldef FlashDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    selected ::
-                        plugin.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()
@@ -140,17 +99,17 @@ enamldef FlashDialog(Dialog): dialog:
                 Label:
                     text = 'Chip (--chip)'
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_chip.items)
+                    items = list(plugin.get_member('flash_chip').items)
                     selected :: plugin.flash_chip = change['value']
                 Label:
                     text = 'Mode (-fm)'
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_mode.items)
+                    items = list(plugin.get_member('flash_mode').items)
                     selected :: plugin.flash_mode = change['value']
                 Label:
                     text = "Frequency (-ff)"
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_freq.items)
+                    items = list(plugin.get_member('flash_freq').items)
                     selected :: plugin.flash_freq = change['value']
                 Label:
                     text = "SPI Connection"
@@ -178,9 +137,10 @@ enamldef FlashDialog(Dialog): dialog:
                     PushButton:
                         text = "Browse"
                         clicked ::
-                            path = FileDialogEx.get_open_file_name(self,
-                                                                   current_path='../micropython/fw',
-                                                                   name_filters=['*.bin','*.ota'])
+                            path = FileDialogEx.get_open_file_name(
+                                self,
+                                current_path='../micropython/fw',
+                                name_filters=['*.bin','*.ota'])
                             if path:
                                 plugin.flash_filename = path
 
@@ -248,9 +208,7 @@ enamldef EraseDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    selected ::
-                        editor = event.workbench.get_plugin('micropyde.editor')
-                        editor.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()
@@ -352,9 +310,7 @@ enamldef BoardInfoDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    selected ::
-                        editor = event.workbench.get_plugin('micropyde.editor')
-                        editor.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()

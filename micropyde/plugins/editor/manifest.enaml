@@ -16,18 +16,12 @@ from enaml.workbench.core.api import Command
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
 
 
-with enaml.imports():
-    from .views.api import (
-        NewFileDialog, EraseDialog, FlashDialog, BoardInfoDialog,
-        SettingsDialog,
-    )
-    from .views.dock import DockView
-
-
 def create_new_area():
     """ Create a new pickable dock area
 
     """
+    with enaml.imports():
+        from .views.dock import DockView
     return DockView()
 
 
@@ -35,31 +29,6 @@ def plugin_command(name, event):
     editor = event.workbench.get_plugin('micropyde.editor')
     handler = getattr(editor, name)
     handler(event)
-
-def erase_flash(event):
-    ui = event.workbench.get_plugin('enaml.workbench.ui')
-    editor = event.workbench.get_plugin('micropyde.editor')
-    EraseDialog(ui.window, event=event, plugin=editor).exec_()
-
-def update_firmware(event):
-    ui = event.workbench.get_plugin('enaml.workbench.ui')
-    plugin = event.workbench.get_plugin('micropyde.editor')
-    path = FileDialogEx.get_open_file_name(
-        ui.window,
-        current_path=plugin.last_path,
-        name_filters=['*.bin','*.ota'])
-
-    if path:
-        plugin.flash_filename = path
-        plugin.last_path = os.path.dirname(path)
-        FlashDialog(ui.window, event=event, plugin=plugin).exec_()
-        #plugin_command('update_firmware', event)
-
-def get_info(event):
-    ui = event.workbench.get_plugin('enaml.workbench.ui')
-    editor = event.workbench.get_plugin('micropyde.editor')
-    BoardInfoDialog(ui.window, event=event, plugin=editor).exec_()
-
 
 
 def open_file(event):
@@ -79,6 +48,9 @@ def open_file(event):
 def new_file(event):
     ui = event.workbench.get_plugin('enaml.workbench.ui')
     plugin = event.workbench.get_plugin('micropyde.editor')
+    with enaml.imports():
+        from micropyde.plugins.editor.views.dialogs import NewFileDialog
+
     NewFileDialog(ui.window, plugin=plugin, event=event).exec_()
 
 
@@ -104,10 +76,13 @@ def save_file_as(event):
 def open_settings(event):
     ui = event.workbench.get_plugin('enaml.workbench.ui')
     plugin = event.workbench.get_plugin('micropyde.editor')
+    with enaml.imports():
+        from .views.api import SettingsDialog
+
     SettingsDialog(ui.window, plugin=plugin, event=event).exec_()
 
 
-def editor_plugin():
+def plugin_factory():
     from .plugin import EditorPlugin
     return EditorPlugin()
 
@@ -143,31 +118,10 @@ enamldef EditorManifest(PluginManifest):
 
     """
     id = 'micropyde.editor'
-    factory = editor_plugin
+    factory = plugin_factory
     Extension:
         id = 'commands'
         point = 'enaml.workbench.core.commands'
-        Command:
-            id = 'micropyde.board.erase_flash'
-            handler = erase_flash
-        Command:
-            id = 'micropyde.board.upload_file'
-            handler = lambda event:plugin_command('upload_file', event)
-        Command:
-            id = 'micropyde.board.run_script'
-            handler = lambda event:plugin_command('run_script', event)
-        Command:
-            id = 'micropyde.board.update_firmware'
-            handler = update_firmware
-        Command:
-           id = 'micropyde.board.get_info'
-           handler = get_info
-        Command:
-            id = 'micropyde.board.build_index'
-            handler = lambda event:plugin_command('build_index', event)
-        Command:
-            id = 'micropyde.board.scan_files'
-            handler = lambda event:plugin_command('scan_files', event)
         Command:
             id = 'micropyde.editor.close_file'
             handler = lambda event:plugin_command('close_file', event)
@@ -248,34 +202,6 @@ enamldef EditorManifest(PluginManifest):
             #     path = '/tools'
             #     label = 'Tools'
             #     before = 'workspace'
-        MenuItem:
-            path = '/board'
-            label = 'Board'
-            after = 'examples'
-            before = 'settings'
-        ActionItem:
-            path = '/board/run'
-            label = 'Run'
-            shortcut = 'Ctrl+R'
-            command = 'micropyde.board.run_script'
-        ActionItem:
-            path = '/board/upload'
-            label = 'Upload'
-            shortcut = 'Ctrl+U'
-            command = 'micropyde.board.upload_file'
-        ActionItem:
-            path = '/board/info'
-            label = 'Board info'
-            command = 'micropyde.board.get_info'
-        ActionItem:
-            path = '/board/firmware'
-            label = 'Flash firmware...'
-            command = 'micropyde.board.update_firmware'
-        ActionItem:
-            path = '/board/erase'
-            label = 'Erase flash...'
-            command = 'micropyde.board.erase_flash'
-
         ActionItem:
             path = '/settings/editor'
             label = 'Editor...'

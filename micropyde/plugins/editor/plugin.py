@@ -8,41 +8,34 @@
 import os
 import jedi
 import enaml
-import jsonpickle as pickle
-import hashlib
-import esptool
 import textwrap
-import traceback
 from glob import glob
 
-from atom.api import (Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
-                      ContainerList, ForwardSubclass, observe)
+from atom.api import (
+    Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
+    ContainerList, ForwardSubclass, observe
+)
 
-from enaml.workbench.api import Plugin
+from micropyde.core import Plugin, Model
 from enaml.layout.api import InsertTab, RemoveItem
 from enaml.application import timed_call
 
-from micropyde.utils import Model
-from micropyde.workspaces.editor import inspection
-from micropyde.workspaces.editor.utils import async_sleep
-from micropyde.workspaces.editor.views.themes import THEMES
+from . import inspection
+from .views.themes import THEMES
 
-from twisted.internet import reactor
-from twisted.internet.protocol import connectionDone
-from twisted.internet.serialport import SerialPort
 from twisted.protocols.basic import LineReceiver
 from twisted.internet.defer import inlineCallbacks, Deferred
 
 
 def EditorItem(*args, **kwargs):
     with enaml.imports():
-        from micropyde.workspaces.editor.views.dock import DockEditorItem
+        from micropyde.plugins.editor.views.dock import DockEditorItem
     return DockEditorItem(*args, **kwargs)
 
 
 def get_settings_page():
     with enaml.imports():
-        from micropyde.workspaces.editor.views.settings import (
+        from micropyde.plugins.editor.views.settings import (
             EditorSettingsPage)
 
     return EditorSettingsPage
@@ -71,7 +64,7 @@ class QueryProtocol(LineReceiver):
         print(line)
         if self.request:
             self.pending += 1
-            reactor.callLater(self.timeout, self.finish)
+            timed_call(self.timeout, self.finish)
 
     def finish(self):
         self.pending -= 1
@@ -170,32 +163,13 @@ class Document(Model):
         """ Determine code completion suggestions for the current cursor
         position in the document.
         """
-        plugin = EditorPlugin.instance()
+        from micropyde.workbench import MicropydeWorkbench
+        workbench = MicropydeWorkbench.instance()
+        plugin = workbench.get_plugin('micropyde.editor')
         self.suggestions = plugin.autocomplete(self.source, self.cursor)
 
 
 class EditorPlugin(Plugin):
-    #: Instance valid while plugin is active
-    _instance = None
-
-    #: Flash setup
-    port = Unicode('/dev/ttyUSB0')
-    flash_chip = Enum('auto', 'esp8266', 'esp32')
-    flash_baud = Int(460800) #, 230400, 921600, 1500000, 115200, 74880)
-    flash_freq = Enum('keep', '40m', '26m', '20m', '80m')
-    flash_mode = Enum('keep', 'qio', 'qout', 'dio', 'dout')
-    flash_size = Enum('detect', '1MB', '2MB', '4MB', '8MB', '16M',
-                      '256KB', '512KB', '2MB-c1', '4MB-c1')
-    flash_address = Int()
-    flash_spi_connection = Unicode()
-    flash_compress = Bool()
-    flash_verify = Bool()
-    flash_filename = Unicode()
-
-    #: Serial setup
-    com_baud = Int(115200)
-    com_port = Instance(SerialPort).tag(persist=False)
-
     #: Module index
     modules = Dict()
     indexing_progress = Int().tag(persist=False)
@@ -236,20 +210,6 @@ class EditorPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Plugin API
     # -------------------------------------------------------------------------
-    @classmethod
-    def instance(cls):
-        return EditorPlugin._instance
-
-    def start(self):
-        """ Load the state when the plugin starts """
-        self._bind_observers()
-        EditorPlugin._instance = self
-
-    def stop(self):
-        """ Unload any state observers when the plugin stops"""
-        self._unbind_observers()
-        EditorPlugin._instance = None
-
     def _default_settings_pages(self):
         """ Available settings pages """
         return {EditorPlugin: self.settings_page}
@@ -258,186 +218,27 @@ class EditorPlugin(Plugin):
         return [self]
 
     # -------------------------------------------------------------------------
-    # State API
-    # -------------------------------------------------------------------------
-    def _bind_observers(self):
-        """ Try to load the plugin state """
-        #: Init state
-        try:
-            with open('editor.db', 'r') as f:
-                state = pickle.loads(f.read())
-            self.__setstate__(state)
-        except Exception as e:
-            print("Failed to load state: {}".format(e))
-
-        #: Hook up observers
-        for name, member in self.members().items():
-            if not member.metadata or member.metadata.get('persist', True):
-                self.observe(name, self._save_state)
-
-    def _save_state(self, change):
-        """ Try to save the plugin state """
-        if change['type'] in ['update', 'container']:
-            try:
-                print("Saving state due to change: {}".format(change))
-
-                #: Dump first so any failure to encode doesn't wipe out the
-                #: previous state
-                state = self.__getstate__()
-                excluded = ['manifest', 'workbench'] + [
-                    m.name for m in self.members().values()
-                    if m.metadata and not m.metadata.get('persist', True)
-                ]
-                for k in excluded:
-                    if k in state:
-                        del state[k]
-                state = pickle.dumps(state)
-
-                with open('editor.db', 'w') as f:
-                    f.write(state)
-            except Exception as e:
-                print("Failed to save state:")
-                traceback.print_exc()
-
-    def _unbind_observers(self):
-        """ Setup state observers """
-        for name, member in self.members().items():
-            if not member.metadata or member.metadata.get('persist', True):
-                self.unobserve(name, self._save_state)
-
-    # -------------------------------------------------------------------------
     # Device API
     # -------------------------------------------------------------------------
-    def open_port(self, protocol):
-        try:
-            self.com_port = SerialPort(protocol, self.port, reactor,
-                                       baudrate=self.com_baud)
-            return True
-        except Exception as e:
-            print(e)
-            return False
-
-    def close_port(self):
-        if self.com_port:
-            self.com_port.connectionLost(connectionDone)
-            self.com_port = None
-
-    def erase_flash(self, protocol):
-        #: TODO: Get port from event
-        cmd = ['python', esptool.__file__, '--port', self.port, 'erase_flash']
-        return self.run_command(protocol, *cmd)
-
-    def update_firmware(self, protocol):
-        cmd = [
-            'python', esptool.__file__,
-            '--port', self.port,
-            '--baud', str(self.flash_baud),
-            '--chip', self.flash_chip,
-            'write_flash',
-            '--flash_size', self.flash_size,
-            '--flash_freq', self.flash_freq,
-            '--flash_mode', self.flash_mode
-        ]
-        if self.flash_verify:
-            cmd.append('--verify')
-        if self.flash_compress:
-            cmd.append('--compress')
-        if self.flash_spi_connection:
-            cmd.append(self.flash_spi_connection)
-        cmd.append(str(self.flash_address))
-        cmd.append(self.flash_filename)
-        return self.run_command(protocol, *cmd)
-
-    def get_flash_info(self, protocol):
-        cmd = ['python', esptool.__file__, '--port', self.port, 'flash_id']
-        self.run_command(protocol, *cmd)
-
-    def get_chip_info(self, protocol):
-        cmd = ['python', esptool.__file__, '--port', self.port, 'chip_id']
-        self.run_command(protocol, *cmd)
-
-    @inlineCallbacks
-    def upload_file(self, event):
-        if not self.com_port:
-            self.get_terminal().toggle_port()
-        source = self.get_editor().get_text().encode()
-        path = self.active_document.name
-        self.com_port.write(b'\n\x05'+textwrap.dedent("""
-            def __uploader__():
-                import sys
-                import uhashlib
-                import ubinascii
-                print("Uploading file...")
-                f = open('{file}','wb')
-                try:
-                    i = {len}
-                    n = 0
-                    chunk = 64
-                    while n < i:
-                        chunk = min(i-n, chunk)
-                        #print("Reading %i..."%chunk)
-                        n += f.write(sys.stdin.read(chunk))
-                        print('Uploaded %i of %i'%(n,i))
-                except Exception as e:
-                    print(e)
-                finally:
-                    f.close()
-                #: Verify
-                try:
-                    print("Verifying...")
-                    f = open('{file}', 'rb')
-                    hash = uhashlib.sha256()
-                    while True:
-                        data = f.read(64)
-                        #print(data)
-                        if not data:
-                            break
-                        hash.update(data)
-                    print("Upload finished sha256={{}}.".format(
-                        ubinascii.hexlify(hash.digest())
-                    ))
-                except Exception as e:
-                    print(e)
-                finally:
-                    f.close()   
-                
-                    
-            __uploader__()""".format(
-                file=path,
-                len=len(source)  #: Test...
-            )).encode()+b'\n\x04')
-
-        #: Have to write to the port slowly... not sure why?
-        i = len(source)
-        n = 0
-        chunk = 64
-        #: Sleep
-        yield async_sleep(100)
-
-        while True:
-            wrote = min(i-n, chunk)
-            data = source[n:n+wrote]
-            if not data:
-                break
-            self.com_port.write(data)
-            n += wrote
-
-            #: Sleep
-            yield async_sleep(100)
-
-        hash = hashlib.sha256()
-        hash.update(source)
-        print("Expected Hash: {}".format(hash.hexdigest()))
-
-    def run_script(self, event):
-        #: Open the port and let it read
-        if not self.com_port:
-            terminal = self.get_terminal()
-            terminal.toggle_port()
-
-        editor = self.get_editor()
-        text = editor.get_text()
-        return self.com_port.write(b'\n\x05'+text.encode()+b'\x04')
+    # def open_port(self, protocol):
+    #     try:
+    #         if self.com_mode == 'serial':
+    #             self.com_port = SerialPort(protocol, self.port, reactor,
+    #                                    baudrate=self.com_baud)
+    #         else:
+    #             self.com_ws =
+    #         return True
+    #     except Exception as e:
+    #         print(e)
+    #         return False
+    #
+    # def close_port(self):
+    #     if self.com_port:
+    #         self.com_port.connectionLost(connectionDone)
+    #         self.com_port = None
+    #
+    # def write_message(self, message):
+    #     """ Send a message to the device """
 
     # -------------------------------------------------------------------------
     # Editor API
@@ -532,15 +333,6 @@ class EditorPlugin(Plugin):
 
     def get_terminal(self):
         return self.get_dock_area().terminal
-
-    def run_command(self, protocol,  *args, **kwargs):
-        """ Run a command without blocking using twisted's spawnProcess 
-        
-        See https://twistedmatrix.com/documents/current/core/howto/process.html
-        
-        """
-        print(" ".join(args))
-        return reactor.spawnProcess(protocol, args[0], args, **kwargs)
 
     # -------------------------------------------------------------------------
     # Document API

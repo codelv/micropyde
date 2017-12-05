@@ -8,8 +8,9 @@
 import os
 from enaml.widgets.api import Container, Timer
 from enaml.scintilla.api import Scintilla, ScintillaIndicator, ScintillaMarker
-from micropyde.workspaces.editor.views.themes import THEMES
-from micropyde.utils import load_image
+from micropyde.plugins.editor.views.themes import THEMES
+from micropyde.core import load_image
+
 
 def detect_syntax(path):
     p, ext = os.path.splitext(path)
