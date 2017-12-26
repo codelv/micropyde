@@ -145,7 +145,7 @@ enamldef DockView(DockArea): view:
         closable = False
         stretch = 1
         ModuleView:
-            plugin << view.plugin
+            plugin << workbench.get_plugin('micropyde.board')
 
     DockItem: file_browser:
         name = 'files-item'
@@ -153,7 +153,7 @@ enamldef DockView(DockArea): view:
         icon = load_icon("folder")
         stretch = 1
         FileBrowserView:
-            plugin << view.plugin
+            plugin << workbench.get_plugin('micropyde.board')
     DockItem:
         name = 'inspection-item'
         title = 'Errors'

@@ -5,7 +5,7 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 #------------------------------------------------------------------------------
-import re
+import os
 import sys
 if sys.platform == 'win32':
     from enaml import winutil
@@ -47,6 +47,8 @@ enamldef NewFileDialog(Dialog): dialog:
                     text = "Name"
                 Field: file_name:
                     submit_triggers = ['auto_sync']
+            Label:
+                text = "In {}".format(os.path.abspath(plugin.project_path))
 
         TaskDialogCommandArea:
             constraints = [

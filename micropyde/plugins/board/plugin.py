@@ -8,15 +8,16 @@
 import socket
 import hashlib
 import textwrap
-from atom.api import Enum, Int, Instance, Unicode, List, Bool, observe
+from atom.api import Dict, Int, Instance, Unicode, List, observe
 from autobahn.twisted.websocket import (
     WebSocketClientFactory, WebSocketClientProtocol
 )
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.internet.serialport import SerialPort
+from twisted.protocols.basic import LineReceiver
 from serial.tools.list_ports import comports
-from enaml.application import deferred_call
+from enaml.application import deferred_call, timed_call
 from micropyde.core import Plugin, Model, async_sleep
 from future.builtins import str
 
@@ -143,10 +144,8 @@ class WebsocketConnection(Connection):
                 this.connection = self
                 self.delegate.connectionMade()
 
-
             def onMessage(self, payload, isBinary):
                 self.delegate.dataReceived(payload)
-
 
             def onClose(self, wasClean, code, reason):
                 self.delegate.connectionLost(reason)
@@ -169,7 +168,7 @@ class WebsocketConnection(Connection):
 
 
 class Board(Model):
-    """ Abstraction layer over a device that allows connections via
+    """ Abstraction layer over a board that allows connections via
     websocket or serial using the same interface
     
     """
@@ -180,7 +179,7 @@ class Board(Model):
     #: Connections that are currently available
     available_connections = List(Connection).tag(persist=False)
 
-    #: Current connection for this device
+    #: Current connection for this board
     connection = Instance(Connection)
 
     def _default_connections(self):
@@ -210,6 +209,13 @@ class Board(Model):
         """ Refresh available connections """
         self.available_connections = self._default_available_connections()
 
+    def _observe_connection(self, change):
+        """ Whenever the connection changes, disconnect  """
+        if change['type'] == 'update':
+            oldvalue = change['oldvalue']
+            if oldvalue:
+                oldvalue.disconnect()
+
     def connect(self, protocol):
         """ Delegate to the current connection """
         return self.connection.connect(protocol)
@@ -221,19 +227,93 @@ class Board(Model):
         return self.connection.disconnect()
 
 
+class QueryProtocol(LineReceiver):
+    """ Handles inspecting the modules on a micropython device
+    using help(module) calls.
+    
+    """
+    timeout = 0.1
+
+    def __init__(self):
+        self.connect_event = Deferred()
+        self.request = None
+
+    def ready(self):
+        return self.connect_event
+
+    def connectionMade(self):
+        self.lines = []
+        self.connect_event.callback(True)
+
+    def lineReceived(self, line):
+        self.lines.append(line.decode())
+        print(line)
+        if self.request:
+            self.pending += 1
+            timed_call(self.timeout, self.finish)
+
+    def finish(self):
+        self.pending -= 1
+        if self.pending == 0:
+            lines = self.lines[:]
+            self.lines = []
+            d = self.request
+            self.request = None
+            d.callback(lines)
+
+    def query(self, msg, raw=False, timeout=None):
+        """ Send a command and wait for it to reply
+        :param msg: 
+        :param timeout: 
+        :return: 
+        """
+        if self.request is not None:
+            #: Only allow one at a time
+            raise RuntimeError("An request is pending!")
+        if timeout:
+            self.timeout = timeout
+        self.pending = 0
+        self.lines = []
+        self.request = Deferred()
+        #: Add a cancel timeout
+        # def cancel():
+        #     d = self.request
+        #     if d:
+        #         self.request = None
+        #         d.errback(IOError("Timeout"))
+        # reactor.callLater(10, cancel)
+
+        if not raw and not msg.endswith(b'\r\n'):
+            msg += b'\r\n'
+        self.transport.write(msg)
+        return self.request
+
+
 class BoardPlugin(Plugin):
 
-    #: Active device
+    #: Active board
     board = Instance(Board, ())
+
+    #: Module index
+    modules = Dict()
+    indexing_progress = Int().tag(persist=False)
+    indexing_status = Unicode().tag(persist=False)
+
+    #: Files on device
+    files = Dict()
+    scanning_progress = Int().tag(persist=False)
+    scanning_status = Unicode().tag(persist=False)
 
     @inlineCallbacks
     def upload_file(self, event):
-        if not self.device.connected:
-            self.get_terminal().toggle_port()
-        source = self.get_editor().get_text().encode()
-        path = self.active_document.name
-        device = self.device
-        device.write(b'\n\x05'+textwrap.dedent("""
+        editor = self.workbench.get_plugin("micropyde.editor")
+        terminal = editor.get_terminal()
+        if not terminal.opened:
+            terminal.toggle_port()
+        source = editor.get_editor().get_text().encode()
+        path = editor.active_document.name
+        board = self.board
+        board.write(b'\n\x05'+textwrap.dedent("""
                 def __uploader__():
                     import sys
                     import uhashlib
@@ -290,7 +370,7 @@ class BoardPlugin(Plugin):
             data = source[n:n+wrote]
             if not data:
                 break
-            device.write(data)
+            board.write(data)
             n += wrote
 
             #: Sleep
@@ -302,10 +382,136 @@ class BoardPlugin(Plugin):
 
     def run_script(self, event):
         #: Open the port and let it read
-        if not self.device.connected:
-            terminal = self.get_terminal()
+        editor = self.workbench.get_plugin("micropyde.editor")
+        terminal = editor.get_terminal()
+        if not terminal.opened:
             terminal.toggle_port()
 
-        editor = self.get_editor()
+        editor = editor.get_editor()
         text = editor.get_text()
-        return self.device.write(b'\n\x05'+text.encode()+b'\x04')
+        return self.board.write(b'\n\x05'+text.encode()+b'\x04')
+
+    # -------------------------------------------------------------------------
+    # Modules API
+    # -------------------------------------------------------------------------
+    @inlineCallbacks
+    def build_index(self, event):
+        print("build index")
+        excluded = ['http_server', 'http_server_ssl']
+        board = self.board
+
+        board.disconnect()
+        device = QueryProtocol()
+
+        board.connect(device)
+
+        self.indexing_progress = 0
+        self.indexing_status = "Connecting...."
+        yield device.ready()
+        sresult = yield device.query(b"\r\nhelp('modules')")
+        print(result)
+        modules = []
+        for line in result:
+            if 'help(' not in line and 'on the filesystem' not in line:
+                modules.extend([m.replace('/', '.') for m in line.split()])
+        if not modules:
+            return
+        index = {}
+        for i, module in enumerate(modules):
+            self.indexing_progress = max(0,
+                                         min(100, int(100*i/len(modules))), 0)
+            if module.startswith("_") or module in excluded:  #: Auto starts!
+                continue
+            index[module] = {}
+            self.indexing_status = "Inspecting {}".format(module)
+            result = yield device.query(
+                b'\r\n\x05'+'import {}\r\nhelp({})\r\n'.format(
+                    module, module).encode()+b'\x04',
+                raw=True)
+            for line in result:
+                if ' -- ' not in line: # Nothing fancy haha
+                    continue
+                key, val = [a.strip() for a in line.split(" -- ")]
+                info = {'name': key}
+                index[module][key] = info
+                if "<" in val and ">" in val: #: TOOD: Use re
+                    info['type'] = val
+                else:
+                    info['value'] = val
+
+                if '<class' in val:
+                    lines = yield device.query(
+                        'help({}.{})'.format(module, key).encode())
+                    attrs = {}
+                    for line in lines:
+                        if ' -- ' not in line:
+                            continue
+                        key, val = [a.strip() for a in line.split(" -- ")]
+                        attrs[key] = val
+                    info['attrs'] = attrs
+        self.indexing_progress = 100
+        self.indexing_status = "Done!"
+        self.modules = index
+
+    # def _default_modules(self):
+    #     """ Try to load module index from the cache """
+    #     try:
+    #         with open('modules.json') as f:
+    #             return json.load(f)
+    #     except Exception as e:
+    #         return {}
+    #
+    # def _observe_modules(self, change):
+    #     """ Try to save module index to the cache """
+    #     if change['type'] == 'update':
+    #         try:
+    #             index = json.dumps(self.modules, indent=2)
+    #             with open('modules.json', 'w') as f:
+    #                 f.write(index)
+    #         except Exception as e:
+    #             print("Failed to save module index: {}".format(e))
+
+    # -------------------------------------------------------------------------
+    # File Browser API
+    # -------------------------------------------------------------------------
+    @inlineCallbacks
+    def scan_files(self, event):
+        excluded = ['http_server',
+                    'http_server_ssl']
+
+        board = self.board
+        board.disconnect()
+        device = QueryProtocol()
+        board.connect(device)
+        self.scanning_progress = 0
+        self.scanning_status = "Connecting...."
+        yield device.ready()
+
+        result = yield device.query(b'\n\x05'+textwrap.dedent("""
+        def __scanfiles__(path):
+            import os
+            files = {}
+            try:
+                for f in os.listdir(path):
+                    files[f] = {
+                        'info':os.stat(f),
+                        'files':__scanfiles__("{}/{}".format(path,f)),
+                        'name':f
+                    }
+            except OSError:
+                pass
+            return files
+        __scanfiles__('.')
+        """).encode()+b'\n\x04', raw=True, timeout=1)
+
+        contents = {}
+        for line in result:
+            try:
+                contents = eval(line)
+                break
+            except:
+                pass
+        #: TODO: Walk...
+        if not contents:
+            return
+        self.files = contents

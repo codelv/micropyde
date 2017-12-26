@@ -23,9 +23,6 @@ from enaml.application import timed_call
 from . import inspection
 from .views.themes import THEMES
 
-from twisted.protocols.basic import LineReceiver
-from twisted.internet.defer import inlineCallbacks, Deferred
-
 
 def EditorItem(*args, **kwargs):
     with enaml.imports():
@@ -40,67 +37,6 @@ def get_settings_page():
 
     return EditorSettingsPage
 
-
-class QueryProtocol(LineReceiver):
-    """ Handles inspecting the modules on a micropython device
-    using help(module) calls.
-    
-    """
-    timeout = 0.1
-
-    def __init__(self):
-        self.connect_event = Deferred()
-        self.request = None
-
-    def ready(self):
-        return self.connect_event
-
-    def connectionMade(self):
-        self.lines = []
-        self.connect_event.callback(True)
-
-    def lineReceived(self, line):
-        self.lines.append(line.decode())
-        print(line)
-        if self.request:
-            self.pending += 1
-            timed_call(self.timeout, self.finish)
-
-    def finish(self):
-        self.pending -= 1
-        if self.pending == 0:
-            lines = self.lines[:]
-            self.lines = []
-            d = self.request
-            self.request = None
-            d.callback(lines)
-
-    def query(self, msg, raw=False, timeout=None):
-        """ Send a command and wait for it to reply
-        :param msg: 
-        :param timeout: 
-        :return: 
-        """
-        if self.request is not None:
-            #: Only allow one at a time
-            raise RuntimeError("An request is pending!")
-        if timeout:
-            self.timeout = timeout
-        self.pending = 0
-        self.lines = []
-        self.request = Deferred()
-        #: Add a cancel timeout
-        # def cancel():
-        #     d = self.request
-        #     if d:
-        #         self.request = None
-        #         d.errback(IOError("Timeout"))
-        # reactor.callLater(10, cancel)
-
-        if not raw and not msg.endswith(b'\r\n'):
-            msg += b'\r\n'
-        self.transport.write(msg)
-        return self.request
 
 
 class Document(Model):
@@ -175,15 +111,15 @@ class EditorPlugin(Plugin):
     indexing_progress = Int().tag(persist=False)
     indexing_status = Unicode().tag(persist=False)
 
-    #: Opened files
-    documents = ContainerList(Document)
-    active_document = Instance(Document)
-    last_path = Unicode(os.path.expanduser('~/'))
-
     #: Files on device
     files = Dict()
     scanning_progress = Int().tag(persist=False)
     scanning_status = Unicode().tag(persist=False)
+
+    #: Opened files
+    documents = ContainerList(Document)
+    active_document = Instance(Document)
+    last_path = Unicode(os.path.expanduser('~/'))
 
     #: Editor settings
     theme = Enum('friendly', *THEMES.keys())
@@ -195,7 +131,7 @@ class EditorPlugin(Plugin):
                      'minimal')
     upy_path = Unicode(os.path.abspath('../micropython/micropython/'))
     upy_lib_path = Unicode(os.path.abspath('../micropython/micropython-lib/'))
-    project_path = Unicode(os.path.abspath('.'))
+    project_path = Unicode(os.path.abspath('./project/'))
     sys_path = List().tag(persist=False)
 
     #: Settings pages
@@ -350,7 +286,7 @@ class EditorPlugin(Plugin):
         path = event.parameters.get('path')
         if not path:
             return
-        doc = Document(name=path)
+        doc = Document(name=os.path.join(self.project_path, path))
         self.documents.append(doc)
         self.active_document = doc
 
@@ -402,6 +338,9 @@ class EditorPlugin(Plugin):
         """
         doc = self.active_document
         assert doc.name, "Can't save a document without a name"
+        file_dir = os.path.dirname(doc.name)
+        if not os.path.exists(file_dir):
+            os.makedirs(file_dir)
         with open(doc.name, 'w') as f:
             f.write(doc.source)
         doc.unsaved = False
@@ -424,129 +363,6 @@ class EditorPlugin(Plugin):
 
         with open(path, 'w') as f:
             f.write(doc.source)
-
-    # -------------------------------------------------------------------------
-    # Modules API
-    # -------------------------------------------------------------------------
-    @inlineCallbacks
-    def build_index(self, event):
-        print("build index")
-        excluded = ['http_server', 'http_server_ssl']
-
-        self.close_port()
-        device = QueryProtocol()
-        if not self.open_port(device):
-            return
-        self.indexing_progress = 0
-        self.indexing_status = "Connecting...."
-        yield device.ready()
-
-        result = yield device.query(b"\r\nhelp('modules')")
-        modules = []
-        for line in result:
-            if 'help(' not in line and 'on the filesystem' not in line:
-                modules.extend([m.replace('/', '.') for m in line.split()])
-        if not modules:
-            return
-        index = {}
-        for i, module in enumerate(modules):
-            self.indexing_progress = max(0,
-                                         min(100, int(100*i/len(modules))), 0)
-            if module.startswith("_") or module in excluded:  #: Auto starts!
-                continue
-            index[module] = {}
-            self.indexing_status = "Inspecting {}".format(module)
-            result = yield device.query(
-                b'\r\n\x05'+'import {}\r\nhelp({})\r\n'.format(
-                    module, module).encode()+b'\x04',
-                raw=True)
-            for line in result:
-                if ' -- ' not in line: # Nothing fancy haha
-                    continue
-                key, val = [a.strip() for a in line.split(" -- ")]
-                info = {'name': key}
-                index[module][key] = info
-                if "<" in val and ">" in val: #: TOOD: Use re
-                    info['type'] = val
-                else:
-                    info['value'] = val
-
-                if '<class' in val:
-                    lines = yield device.query(
-                        'help({}.{})'.format(module, key).encode())
-                    attrs = {}
-                    for line in lines:
-                        if ' -- ' not in line:
-                            continue
-                        key, val = [a.strip() for a in line.split(" -- ")]
-                        attrs[key] = val
-                    info['attrs'] = attrs
-        self.indexing_progress = 100
-        self.indexing_status = "Done!"
-        self.modules = index
-
-    # def _default_modules(self):
-    #     """ Try to load module index from the cache """
-    #     try:
-    #         with open('modules.json') as f:
-    #             return json.load(f)
-    #     except Exception as e:
-    #         return {}
-    #
-    # def _observe_modules(self, change):
-    #     """ Try to save module index to the cache """
-    #     if change['type'] == 'update':
-    #         try:
-    #             index = json.dumps(self.modules, indent=2)
-    #             with open('modules.json', 'w') as f:
-    #                 f.write(index)
-    #         except Exception as e:
-    #             print("Failed to save module index: {}".format(e))
-
-    # -------------------------------------------------------------------------
-    # File Browser API
-    # -------------------------------------------------------------------------
-    @inlineCallbacks
-    def scan_files(self, event):
-        excluded = ['http_server',
-                    'http_server_ssl']
-
-        self.close_port()
-        device = QueryProtocol()
-        if not self.open_port(device):
-            return
-        self.scanning_progress = 0
-        self.scanning_status = "Connecting...."
-        yield device.ready()
-
-        result = yield device.query(b'\n\x05'+textwrap.dedent("""
-        def __scanfiles__(path):
-            import os
-            files = {}
-            try:
-                for f in os.listdir(path):
-                    files[f] = {
-                        'info':os.stat(f),
-                        'files':__scanfiles__("{}/{}".format(path,f)),
-                        'name':f
-                    }
-            except OSError:
-                pass
-            return files
-        __scanfiles__('.')
-        """).encode()+b'\n\x04', raw=True, timeout=1)
-
-        contents = {}
-        for line in result:
-            try:
-                contents = eval(line)
-                break
-            except:
-                pass
-        #: TODO: Walk...
-        if not contents:
-            return
-        self.files = contents
 
     # -------------------------------------------------------------------------
     # Code inspection API

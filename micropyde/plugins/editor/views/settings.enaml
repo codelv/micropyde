@@ -46,6 +46,20 @@ enamldef EditorSettingsPage(SettingsPage):
         ObjectCombo:
             items = list(THEMES.keys())
             selected := plugin.theme
+    Label:
+        text = "Project"
+    Form:
+        Label:
+            text = "Path"
+        Label:
+            text = ""
+        Field:
+            text := plugin.project_path
+        PushButton:
+            text = "Browse"
+            clicked :: FileDialogEx.get_existing_directory(
+                self,
+                current_path=plugin.project_path)
 
     Label:
         text = "Micropython SDK"

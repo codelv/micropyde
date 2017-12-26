@@ -71,6 +71,7 @@ enamldef EditorView(Container): view:
             "use_tabs": False,
             "indent": 4,
             "tab_indents": True,
+            "auto_indent": True,
             "backspace_unindents": True,
             "autocompletion_threshold": 1,
             "autocompletion_case_sensitive": True,
