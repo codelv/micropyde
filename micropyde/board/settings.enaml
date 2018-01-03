@@ -1,0 +1,75 @@
+"""
+Copyright (c) 2017, Jairus Martin.
+
+Distributed under the terms of the GPL v3 License.
+
+The full license is in the file LICENSE, distributed with this software.
+
+@author: jrm
+"""
+from enaml.core.api import Looper
+from enaml.layout.api import align, hbox, spacer
+from enaml.core.api import Conditional
+from enaml.stdlib.mapped_view import MappedView
+from enaml.widgets.api import (
+    Dialog, Field, Label, PushButton, Form, ObjectCombo, SplitItem, Splitter,
+    Container, SpinBox, FileDialogEx,
+
+)
+from .plugin import SerialConnection, WebsocketConnection
+
+enamldef WebsocketConnectionForm(Container):
+    attr model
+    padding = 0
+    Label:
+        text = "Websocket"
+    Form:
+        Label:
+            text = "Address"
+        Field:
+            text := model.address
+        Label:
+            text = "Port"
+        SpinBox:
+            value := model.port
+            maximum = 65535
+        PushButton:
+            text = "Scan"
+            clicked :: pass
+
+
+enamldef SerialConnectionForm(Container):
+    attr model
+    padding = 0
+    Label:
+        text = "Serial Port"
+    Form:
+        Label:
+            text = "Port"
+        Field:
+            text := model.port
+        Label:
+            text = "Baudrate"
+        SpinBox:
+            value := model.baudrate
+            maximum = 999999999
+            single_step = 9600
+
+enamldef BoardSettingsPage(Container):
+    attr model
+    attr board << model.board
+    Label:
+        text = "Connection type"
+    Form:
+        ObjectCombo:
+            items << board.configured_connections
+            to_string = lambda c:c.__class__.__name__
+            selected := board.connection
+    MappedView:
+        model << board.connection
+        typemap = {SerialConnection: SerialConnectionForm,
+                   WebsocketConnection: WebsocketConnectionForm}
+
+
+
+

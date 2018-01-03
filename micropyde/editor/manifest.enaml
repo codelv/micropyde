@@ -1,0 +1,249 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import os
+import enaml
+from glob import glob
+from collections import OrderedDict
+from enaml.widgets.api import FileDialogEx
+from enaml.core.api import Looper
+from enaml.workbench.api import Extension, PluginManifest
+from enaml.workbench.core.api import Command
+from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
+from micropyde.ui.extensions import DOCK_ITEM_POINT, DockItem, SETTINGS_PAGE_POINT, SettingsPage
+
+
+def plugin_command(name, event):
+    editor = event.workbench.get_plugin('micropyde.editor')
+    handler = getattr(editor, name)
+    handler(event)
+
+
+def open_file(event):
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.editor')
+    path = event.parameters.get('path', '')
+    if not path:
+        path = FileDialogEx.get_open_file_name(
+            ui.window,
+            current_path=plugin.last_path,
+            name_filters=['*.py','*.c','*.cpp', '*.*'])
+        plugin.last_path = os.path.dirname(path)
+    if path:
+        event.parameters['path'] = path
+        plugin.open_file(event)
+
+def new_file(event):
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.editor')
+    with enaml.imports():
+        from .dialogs import NewFileDialog
+
+    NewFileDialog(ui.window, plugin=plugin, event=event).exec_()
+
+
+def save_file(event):
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.editor')
+    if plugin.active_document.name:
+        return plugin.save_file(event)
+    else:
+        return save_file_as(event)
+
+
+def save_file_as(event):
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.editor')
+    path = FileDialogEx.get_save_file_name(
+        ui.window, current_path=os.path.dirname(plugin.active_document.name))
+    if path:
+        event.parameters['path'] = path
+        plugin.save_file_as(event)
+
+
+def plugin_factory():
+    from .plugin import EditorPlugin
+    return EditorPlugin()
+
+
+def editor_settings_page_factory():
+    with enaml.imports():
+        from .settings import EditorSettingsPage
+    return EditorSettingsPage
+
+def upy_settings_page_factory():
+    with enaml.imports():
+        from .settings import MicropythonSettingsPage
+    return MicropythonSettingsPage
+
+def editor_item_factory():
+    with enaml.imports():
+        from .editor import EditorDockItem
+    return EditorDockItem
+
+
+def modules_item_factory():
+    with enaml.imports():
+        from .modules import ModulesDockItem
+    return ModulesDockItem
+
+
+def browser_item_factory():
+    with enaml.imports():
+        from .file_browser import FileBrowserDockItem
+    return FileBrowserDockItem
+
+
+def inspection_item_factory():
+    with enaml.imports():
+        from .inspection_view import CodeInspectionDockItem
+    return CodeInspectionDockItem
+
+
+def get_examples():
+    """ Get all examples matching examples/*/*.py """
+    examples = OrderedDict([])
+    py_files = [f.replace("\\","/").split("/")[1:] for f in glob('examples/**/*.py', recursive=True)]
+    for path in sorted(py_files):
+        folders = path[:-1]
+        folder = None
+        #: Need to add all folders one at a time to make sure
+        #: menu items for each are created exactly once
+        #: Ex. examples/pyb/01-Bla will create the keys in order
+        #: ['examples','examples/pyb','examples/pyb/01-Bla']
+        for i in range(len(folders)):
+            subfolder = folders[i]
+            if folder:
+                folder = "{}/{}".format(folder,subfolder)
+            else:
+                folder = subfolder
+            if folder not in examples:
+                examples[folder] = []
+        examples[folder].append("/".join(path))
+    return examples
+
+
+enamldef EditorManifest(PluginManifest):
+    """ The manifest which is registered when the view is loaded.
+
+    This manifest contributes extra menu items to the menu bar and
+    new commands for manipulating the dock area items.
+
+    """
+    id = 'micropyde.editor'
+    factory = plugin_factory
+    Extension:
+        id = 'commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'micropyde.editor.close_file'
+            handler = lambda event:plugin_command('close_file', event)
+        Command:
+            id = 'micropyde.editor.save_file'
+            handler = save_file
+        Command:
+            id = 'micropyde.editor.save_file_as'
+            handler = save_file_as
+        Command:
+            id = 'micropyde.editor.new_file'
+            handler = new_file
+        Command:
+            id = 'micropyde.editor.open_file'
+            handler = open_file
+    Extension:
+        id = 'actions'
+        point = 'enaml.workbench.ui.actions'
+        ActionItem:
+            path = '/file/new'
+            label = 'New'
+            shortcut = 'Ctrl+N'
+            group = 'user'
+            command = 'micropyde.editor.new_file'
+        ActionItem:
+            path = '/file/open'
+            label = 'Open'
+            shortcut = 'Ctrl+O'
+            group = 'user'
+            command = 'micropyde.editor.open_file'
+        ActionItem:
+            path = '/file/close'
+            enabled << bool(workbench and workbench.get_plugin("micropyde.editor").active_document)
+            label = 'Close'
+            shortcut = 'Ctrl+W'
+            group = 'document'
+            command = 'micropyde.editor.close_file'
+        ActionItem:
+            path = '/file/save'
+            enabled << bool(workbench and workbench.get_plugin("micropyde.editor").active_document)
+            label = 'Save'
+            shortcut = 'Ctrl+S'
+            group = 'document'
+            command = 'micropyde.editor.save_file'
+        ActionItem:
+            path = '/file/save_as'
+            enabled << bool(workbench and workbench.get_plugin("micropyde.editor").active_document)
+            label = 'Save As'
+            shortcut = 'Ctrl+Shift+S'
+            group = 'document'
+            command = 'micropyde.editor.save_file_as'
+        MenuItem:
+            path = '/examples'
+            label = 'Examples'
+            after = 'file'
+            before = 'settings'
+            ItemGroup:
+                id = 'examples'
+
+        Looper:
+            iterable = get_examples().items()
+            MenuItem:
+                path = '/examples/{}'.format(loop_item[0].replace(" ",'-'))
+                label = loop_item[0].split("/")[-1]
+                group = 'examples' if len(loop_item[0].split("/")) == 0 else ""
+            Looper:
+                iterable = loop_item[1]
+                ActionItem:
+                    attr filename = loop_item.split("/")[-1]
+                    path = '/examples/{}'.format(loop_item.replace(" ",'-'))
+                    label = filename
+                    command = 'micropyde.editor.open_file'
+                    parameters = {'path': 'examples/{}'.format(loop_item), 'name': 'main.py'}
+            # MenuItem:
+            #     path = '/tools'
+            #     label = 'Tools'
+            #     before = 'workspace'
+    Extension:
+        id = 'settings'
+        point = SETTINGS_PAGE_POINT
+        SettingsPage:
+            name = "Editor"
+            plugin_id = 'micropyde.editor'
+            factory = editor_settings_page_factory
+#        SettingsPage:
+#            name = "Micropython"
+#            plugin_id = 'micropyde.editor'
+#            factory = upy_settings_page_factory
+
+    Extension:
+        id = 'items'
+        point = DOCK_ITEM_POINT
+        DockItem:
+            plugin_id = 'micropyde.editor'
+            factory = editor_item_factory
+            layout = 'main'
+        DockItem:
+            plugin_id = 'micropyde.editor'
+            factory = modules_item_factory
+            layout = 'left'
+        DockItem:
+            plugin_id = 'micropyde.editor'
+            factory = browser_item_factory
+            layout = 'left'
+        DockItem:
+            plugin_id = 'micropyde.editor'
+            factory = inspection_item_factory
+            layout = 'right'

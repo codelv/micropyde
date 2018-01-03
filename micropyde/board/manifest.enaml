@@ -1,0 +1,103 @@
+"""
+Copyright (c) 2017, Jairus Martin.
+
+Distributed under the terms of the GPL v3 License.
+
+The full license is in the file LICENSE, distributed with this software.
+
+@author: jrm
+"""
+import os
+import enaml
+from glob import glob
+from collections import OrderedDict
+from enaml.widgets.api import FileDialogEx
+from enaml.core.api import Looper
+from enaml.workbench.api import Extension, PluginManifest
+from enaml.workbench.core.api import Command
+from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup, Autostart
+from micropyde.ui.extensions import DOCK_ITEM_POINT, DockItem, SETTINGS_PAGE_POINT, SettingsPage
+
+def plugin_command(name, event):
+    editor = event.workbench.get_plugin('micropyde.board')
+    handler = getattr(editor, name)
+    handler(event)
+
+
+def plugin_factory():
+    from .plugin import BoardPlugin
+    return BoardPlugin()
+
+
+def monitor_factory():
+    with enaml.imports():
+        from .view import MonitorDockItem
+    return MonitorDockItem
+
+
+def settings_factory():
+    with enaml.imports():
+        from .settings import BoardSettingsPage
+    return BoardSettingsPage
+
+
+enamldef BoardManifest(PluginManifest):
+    """ The manifest which is registered when the view is loaded.
+
+    This manifest contributes extra menu items to the menu bar and
+    new commands for manipulating the dock area items.
+
+    """
+    id = 'micropyde.board'
+    factory = plugin_factory
+    Extension:
+        id = 'commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'micropyde.board.upload_file'
+            handler = lambda event:plugin_command('upload_file', event)
+        Command:
+            id = 'micropyde.board.run_script'
+            handler = lambda event:plugin_command('run_script', event)
+        Command:
+            id = 'micropyde.board.build_index'
+            handler = lambda event:plugin_command('build_index', event)
+        Command:
+            id = 'micropyde.board.scan_files'
+            handler = lambda event:plugin_command('scan_files', event)
+
+    Extension:
+        id = 'actions'
+        point = 'enaml.workbench.ui.actions'
+        MenuItem:
+            path = '/board'
+            label = 'Board'
+            after = 'examples'
+            before = 'settings'
+        ActionItem:
+            path = '/board/run'
+            label = 'Run'
+            shortcut = 'Ctrl+R'
+            command = 'micropyde.board.run_script'
+        ActionItem:
+            path = '/board/upload'
+            label = 'Upload'
+            shortcut = 'Ctrl+U'
+            command = 'micropyde.board.upload_file'
+
+    Extension:
+        id = 'items'
+        point = DOCK_ITEM_POINT
+        DockItem:
+            plugin_id = 'micropyde.board'
+            factory = monitor_factory
+            layout = 'bottom'
+
+    Extension:
+        id = 'settings'
+        point = SETTINGS_PAGE_POINT
+        SettingsPage:
+            name = "Monitor"
+            plugin_id = 'micropyde.board'
+            factory = settings_factory
+

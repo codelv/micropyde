@@ -1,0 +1,30 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+from enaml.widgets.api import Container, Html
+from enaml.widgets.api import Container, PushButton, ProgressBar, Label
+from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
+from micropyde.core.api import DockItem
+from micropyde.core.utils import load_icon
+
+
+enamldef CodeInspectionView(Container):
+    attr plugin
+    Html:
+        source << "<br/>".join(plugin.active_document.errors)
+        ##source ::
+        #if self.source:
+        #    errors.alert('inspection-item')
+
+enamldef CodeInspectionDockItem(DockItem): view:
+    name = 'inspection-item'
+    title = 'Errors'
+    closable = False
+    icon = load_icon("flag_red")
+    stretch = 1
+    CodeInspectionView: errors:
+        plugin << view.plugin

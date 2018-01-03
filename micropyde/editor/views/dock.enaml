@@ -1,0 +1,148 @@
+#------------------------------------------------------------------------------
+# Copyright (c) 2017 Jairus Martin
+#
+# Distributed under the terms of the GPL v3 License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+#------------------------------------------------------------------------------
+import os
+import textwrap
+from glob import glob
+from collections import OrderedDict
+from serial.tools.list_ports import comports
+from enaml.core.api import Conditional, Looper
+from enaml.layout.api import (
+    HSplitLayout, AreaLayout, DockBarLayout, VSplitLayout, TabLayout,
+    hbox, vbox, align
+)
+from enaml.widgets.api import (
+    FileDialogEx, Container, Html, IPythonConsole, PushButton,
+    ObjectCombo, Timer, ProgressBar, Label,
+)
+from enaml.workbench.api import Extension, PluginManifest
+from enaml.workbench.core.api import Command
+from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
+from enaml.widgets.dock_events import DockItemEvent
+
+from micropyde.core import load_icon
+
+from micropyde.plugins.editor.utils import PickableDockArea as DockArea
+from micropyde.plugins.editor.utils import PickableDockItem as DockItem
+from .api import (
+    ModuleView, FileBrowserView, CodeInspectionView, EditorView
+)
+from micropyde.plugins.board.terminal import TerminalView
+
+
+
+
+def editor_items(documents):
+    return ['editor-item-{}'.format(doc.name) for doc in documents]
+
+def get_document(documents, path):
+    return [d for d in documents if d.name==path]
+
+
+enamldef DockEditorItem(DockItem): item:
+    attr doc
+    attr plugin
+    name = 'editor-item-{}'.format(doc.name)
+    title << format_title(plugin.documents, doc, doc.name, doc.unsaved)
+    closed ::
+        core = plugin.workbench.get_plugin("enaml.workbench.core")
+        core.invoke_command('micropyde.editor.close_file',
+                            {'path':doc.name})
+    stretch = 4
+    icon = load_icon("script_code")
+    EditorView:
+        plugin << item.plugin
+        model << item.doc
+
+
+enamldef DockView(DockArea): view:
+    name = 'dock_area'
+    alias terminal
+    attr workbench
+    alias looper
+    attr plugin
+    dock_events_enabled = True
+    dock_event ::
+        event = change['value']
+
+        #: Update the active document
+        if event.type == DockItemEvent.Type.Shown \
+                and 'editor-item-' in event.name:
+            path = event.name.split("editor-item-")[-1]
+            matches = [d for d in plugin.documents if d.name==path]
+            if matches:
+                plugin.active_document = matches[0]
+        else:
+            plugin.save_dock_area(change)
+
+    #: Set the initial layout
+    layout = AreaLayout(
+        TabLayout(*['editor-item-{}'.format(doc.name)
+                    for doc in plugin.documents]),
+        dock_bars=[
+            DockBarLayout(
+                'modules-item',
+                'files-item',
+                position='left',
+            ),
+            DockBarLayout(
+                'console-item',
+                'ipython-item',
+                position='bottom',
+            ),
+            DockBarLayout(
+                'inspection-item',
+                position='right',
+            ),
+        ],
+    )
+    Looper: looper:
+        iterable = plugin.documents
+        DockEditorItem:
+            doc << loop_item
+            plugin << view.plugin
+    DockItem: module_index:
+        name = 'modules-item'
+        title = 'Modules'
+        icon = load_icon("package")
+        closable = False
+        stretch = 1
+        ModuleView:
+            plugin << workbench.get_plugin('micropyde.board')
+
+    DockItem: file_browser:
+        name = 'files-item'
+        title = 'Files'
+        icon = load_icon("folder")
+        stretch = 1
+        FileBrowserView:
+            plugin << workbench.get_plugin('micropyde.board')
+    DockItem:
+        name = 'inspection-item'
+        title = 'Errors'
+        closable = False
+        icon = load_icon("flag_red")
+        stretch = 1
+        CodeInspectionView: errors:
+            plugin << view.plugin
+    DockItem:
+        name = 'console-item'
+        title = 'Terminal'
+        icon = load_icon("application_xp_terminal")
+        closable = False
+        stretch = 1
+        TerminalView: terminal:
+            plugin << view.plugin
+    DockItem:
+        name = 'ipython-item'
+        title = 'IPython'
+        icon = load_icon("application_osx")
+        closable = False
+        Container:
+            padding = 0
+            IPythonConsole: ipython:
+                minimum_size = (200, 200)
