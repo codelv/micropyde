@@ -5,7 +5,7 @@ Distributed under the terms of the GPL v3 License.
 
 The full license is in the file LICENSE, distributed with this software.
 
-Created on Jul 12, 2015
+Created on Dec 12, 2017
 
 @author: jrm
 """

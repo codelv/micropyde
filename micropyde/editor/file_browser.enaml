@@ -1,10 +1,12 @@
-#------------------------------------------------------------------------------
-# Copyright (c) 2017 Jairus Martin
-#
-# Distributed under the terms of the GPL v3 License.
-#
-# The full license is in the file LICENSE, distributed with this software.
-#------------------------------------------------------------------------------
+"""
+Copyright (c) 2017, Jairus Martin.
+
+Distributed under the terms of the GPL v3 License.
+
+The full license is in the file LICENSE, distributed with this software.
+
+@author: jrm
+"""
 from enaml.core.api import Conditional, Looper
 from enaml.core.dynamic_template import DynamicTemplate
 from enaml.widgets.api import Container, PushButton, ProgressBar, Label, Field
