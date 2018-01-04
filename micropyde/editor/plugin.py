@@ -27,7 +27,7 @@ from enaml.scintilla.themes import THEMES
 
 def EditorItem(*args, **kwargs):
     with enaml.imports():
-        from micropyde.editor.views.editor import EditorDockItem
+        from .editor import EditorDockItem
     return EditorDockItem(*args, **kwargs)
 
 
