@@ -18,6 +18,7 @@ from enaml.scintilla.themes import THEMES
 from enamlx.widgets.api import KeyEvent
 from micropyde.core.utils import load_icon
 from micropyde.core.api import DockItem
+from .dialogs import PasswordDialog
 
 
 class TerminalProtocol(Protocol):
@@ -48,8 +49,23 @@ class TerminalProtocol(Protocol):
             #: Notify any listeners
             for listener in self.listeners:
                 listener(data)
+
+            if "Password:" in data:
+                self.onPassword()
         except Exception as e:
             print("Failed to read output: {}".format(e))
+
+    def onPassword(self):
+        """ Probably shouldn't go here but whatever """
+        view = self.view
+        plugin = view.plugin
+
+        #: Check for a saved password
+        pwd = plugin.passwords.get(plugin.board.connection.name)
+        if pwd:
+            view.write_text(pwd)
+        else:
+            PasswordDialog(view, plugin=view.plugin, view=view).exec_()
 
 
 enamldef MonitorDockItem(DockItem): view:
@@ -63,6 +79,7 @@ enamldef MonitorDockItem(DockItem): view:
     icon = load_icon("application_osx")
     closable = False
     stretch = 1
+    attr editor_plugin << plugin.workbench.get_plugin("micropyde.editor")
 
     func on_connect(result):
         if result:
@@ -105,9 +122,11 @@ enamldef MonitorDockItem(DockItem): view:
         ObjectCombo: ports_cmb:
             items << device.available_connections
             to_string = lambda c:c.name
+            selected << device.connection
             selected ::
                 connection = change['value']
                 if connection:
+                    device.disconnect()
                     device.connection = change['value']
 
         PushButton: btn_open:
@@ -132,7 +151,7 @@ enamldef MonitorDockItem(DockItem): view:
                     resist_height = 'weak'
                     Scintilla: console:
                         syntax = "python"
-                        #theme << THEMES[plugin.workbench.get_plugin('micropyide.editor').theme]
+                        theme << THEMES[editor_plugin.theme] if editor_plugin else 'friendly'
                         #text_changed ::
                         #    self.proxy.widget.
                         activated ::
@@ -162,7 +181,8 @@ enamldef MonitorDockItem(DockItem): view:
                     ]
                     Scintilla: editor:
                         syntax = "python"
-                        #theme << THEMES[plugin.theme]
+
+                        theme << THEMES[editor_plugin.theme] if editor_plugin else 'friendly'
                         #enabled << opened
                         settings = {
                             "tab_width": 4,
@@ -170,7 +190,7 @@ enamldef MonitorDockItem(DockItem): view:
                             "indent": 4,
                             "tab_indents": True,
                             "backspace_unindents": True,
-                            "autocompletion_threshold": 1,
+                            "autocompletion_threshold": 3,
                         }
                         autocomplete = 'all'
                         text_changed :: timer.start()
@@ -179,7 +199,7 @@ enamldef MonitorDockItem(DockItem): view:
                             single_shot = True
                             timeout ::
                                 text = editor.get_text()
-                                editor.autocompletions = plugin.autocomplete(
+                                editor.autocompletions = editor_plugin.autocomplete(
                                     text, editor.cursor_position)
                                 #: Force trigger
                                 if text.endswith("."):

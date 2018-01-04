@@ -14,10 +14,9 @@ import json
 import enaml
 import traceback
 import jsonpickle as pickle
-from future.builtins import str
-from atom.api import Atom, Unicode, List, Member, Dict
+from atom.api import Atom, Unicode, List, Member
 from enaml.workbench.plugin import Plugin as EnamlPlugin
-from enaml.widgets.api import Container
+from twisted.internet import reactor
 from .utils import log, clip
 
 
@@ -69,13 +68,9 @@ class Plugin(EnamlPlugin):
     
     """
 
-    #: Settings pages this plugin adds
-    settings_pages = Dict(Atom, Container)
-    settings_items = List(Atom)
-
     #: File used to save and restore the state for this plugin
     _state_file = Unicode()
-    _state_excluded = List(str)
+    _state_excluded = List()
     _state_members = List(Member)
 
     # -------------------------------------------------------------------------
@@ -89,6 +84,15 @@ class Plugin(EnamlPlugin):
     def stop(self):
         """ Unload any state observers when the plugin stops"""
         self._unbind_observers()
+
+    def run_command(self, protocol,  *args, **kwargs):
+        """ Run a command without blocking using twisted's spawnProcess 
+        
+        See https://twistedmatrix.com/documents/current/core/howto/process.html
+        
+        """
+        log.debug("cmd |  {}".format(" ".join(args)))
+        return reactor.spawnProcess(protocol, args[0], args, **kwargs)
 
     # -------------------------------------------------------------------------
     # State API
@@ -166,15 +170,5 @@ class Plugin(EnamlPlugin):
         """ Setup state observers """
         for member in self._state_members:
             self.unobserve(member.name, self._save_state)
-
-    # -------------------------------------------------------------------------
-    # Settings API
-    # -------------------------------------------------------------------------
-    def _default_settings_pages(self):
-        """ Available settings pages """
-        return {}
-
-    def _default_settings_items(self):
-        return []
 
 

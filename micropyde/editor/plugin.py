@@ -257,7 +257,7 @@ class EditorPlugin(Plugin):
         return dock_item.children[0].editor
 
     def get_terminal(self):
-        return self.get_dock_area().terminal
+        return self.get_dock_area().find('monitor-item')
 
     # -------------------------------------------------------------------------
     # Document API

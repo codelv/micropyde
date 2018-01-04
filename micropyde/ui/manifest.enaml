@@ -162,6 +162,11 @@ enamldef UIManifest(PluginManifest):
             label = 'Donate...'
             command = 'micropyde.ui.open_url'
             parameters = {'url': 'https://www.codelv.com/projects/micropyde/support/'}
+        ActionItem:
+            path = '/help/logs'
+            label = 'Open logs...'
+            command = 'micropyde.ui.open_url'
+            parameters = {'url': os.path.expanduser('~/.config/micropyde/logs')}
 
 #         ActionItem:
 #             path = '/edit/undo'

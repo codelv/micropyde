@@ -47,8 +47,8 @@ enamldef NewFileDialog(Dialog): dialog:
                     text = "Name"
                 Field: file_name:
                     submit_triggers = ['auto_sync']
-            Label:
-                    text = "Folder"
+                Label:
+                  text = "Folder"
                 Container:
                     constraints = [
                         hbox(f1, pb1)

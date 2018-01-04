@@ -78,12 +78,17 @@ enamldef EspManifest(PluginManifest):
             path = '/board/info'
             label = 'Board info'
             command = 'micropyde.esp.get_info'
+            group = 'flash'
         ActionItem:
             path = '/board/firmware'
             label = 'Flash firmware...'
             command = 'micropyde.esp.update_firmware'
+            after = 'info'
+            group = 'flash'
         ActionItem:
             path = '/board/erase'
             label = 'Erase flash...'
             command = 'micropyde.esp.erase_flash'
+            after = 'firmware'
+            group = 'flash'
 

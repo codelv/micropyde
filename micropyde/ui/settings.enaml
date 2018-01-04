@@ -97,7 +97,10 @@ enamldef SettingsDialog(Dialog): dialog:
             ]
             PushButton: btn_ok:
                 text = "Ok"
-                clicked :: dialog.close()
+                clicked ::
+                    #: Save
+                    settings.p.save()
+                    dialog.close()
             PushButton: btn_no:
                 text = "Cancel"
                 clicked :: dialog.close()

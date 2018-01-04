@@ -16,14 +16,23 @@ from enaml.widgets.api import (
     Container, SpinBox, FileDialogEx,
 
 )
+from micropyde.core.utils import load_icon
 from .plugin import SerialConnection, WebsocketConnection
+
 
 enamldef WebsocketConnectionForm(Container):
     attr model
     padding = 0
+    #activated ::
+    #    model.scan_subnet()
     Label:
         text = "Websocket"
     Form:
+        Label:
+            text = "Devices"
+        ObjectCombo:
+            items << model.addresses
+            selected := model.address
         Label:
             text = "Address"
         Field:
@@ -35,7 +44,9 @@ enamldef WebsocketConnectionForm(Container):
             maximum = 65535
         PushButton:
             text = "Scan"
-            clicked :: pass
+            tool_tip = "Scan the local subnet for devices serving on the given port number"
+            icon = load_icon('arrow_refresh')
+            clicked :: model.scan_subnet()
 
 
 enamldef SerialConnectionForm(Container):

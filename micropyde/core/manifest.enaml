@@ -9,6 +9,7 @@ Created on Dec 6, 2017
 
 @author: jrm
 """
+import sys
 from enaml.workbench.api import Extension, PluginManifest
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup, Autostart
 
@@ -21,8 +22,12 @@ def application_factory():
     app = QtApplication()
 
     #: Install twisted support into the Qt event loop
-    #import qt4reactor
-    #qt4reactor.install()
+    if sys.version_info.major == 2:
+        import qt4reactor
+        qt4reactor.install()
+    else:
+        import qt5reactor
+        qt5reactor.install()
 
     return app
 
@@ -35,7 +40,7 @@ def window_factory(workbench):
     import enaml
     with enaml.imports():
         from enaml.workbench.ui.workbench_window import WorkbenchWindow
-    return WorkbenchWindow(initial_size=(960, 720))
+    return WorkbenchWindow(initial_size=(960, 480))
 
 
 def workspace_factory(workbench):

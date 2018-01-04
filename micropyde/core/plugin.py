@@ -56,3 +56,8 @@ class CorePlugin(Plugin):
 
         root.addHandler(disk)
         root.addHandler(stream)
+
+        #: Start twisted logger
+        from twisted.python.log import PythonLoggingObserver
+        observer = PythonLoggingObserver()
+        observer.start()

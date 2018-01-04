@@ -15,14 +15,15 @@ from autobahn.twisted.websocket import (
     WebSocketClientFactory, WebSocketClientProtocol
 )
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.defer import Deferred, DeferredList, inlineCallbacks
 from twisted.internet.serialport import SerialPort
 from twisted.protocols.basic import LineReceiver
+from twisted.internet.protocol import Protocol
+from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from serial.tools.list_ports import comports
 from enaml.application import deferred_call, timed_call
 from micropyde.core.api import Plugin, Model
-from micropyde.core.utils import async_sleep
-from future.builtins import str
+from micropyde.core.utils import async_sleep, log
 
 
 class Connection(Model):
@@ -106,6 +107,7 @@ class WebsocketConnection(Connection):
 
     #: ws address
     #: TODO: Config this
+    addresses = List().tag(config=True)
     address = Unicode('192.168.41.144').tag(config=True)
 
     #: Ws port
@@ -135,6 +137,34 @@ class WebsocketConnection(Connection):
         except Exception as e:
             print("ws REPL unavailable: {}".format(e))
             return False
+
+    def scan_subnet(self):
+        """ Scan to find any ws clients on the port"""
+        subnet = self.address.split('.')[0:3]
+        addrs = []
+
+        def on_connect(p, addr):
+            log.debug("scan | {}:{} is up!".format(addr,
+                                                   self.port))
+            addrs.append(addr)
+            p.transport.loseConnection()
+
+        #: Scan for everything in the subnet
+        #: timeout after 1 second
+        ds = []
+        for i in range(256):
+            addr = ".".join(subnet+[str(i)])
+            point = TCP4ClientEndpoint(reactor, addr, self.port)
+            d = connectProtocol(point, Protocol())
+            d.addCallback(lambda p, addr=addr: on_connect(p, addr))
+            d.addErrback(lambda e, addr=addr: log.debug(
+                "scan | {} is down".format(addr)))
+            reactor.callLater(1, d.cancel)
+            ds.append(d)
+
+        #: When they all finish update the addresses property
+        done = DeferredList(ds)
+        done.addCallback(lambda r: setattr(self, 'addresses', addrs))
 
     def connect(self, protocol):
         d = Deferred()
@@ -312,6 +342,9 @@ class BoardPlugin(Plugin):
     files = Dict().tag(config=True)
     scanning_progress = Int()
     scanning_status = Unicode()
+
+    #: Passwords
+    passwords = Dict().tag(config=True)
 
     # -------------------------------------------------------------------------
     # Board API
@@ -527,3 +560,7 @@ class BoardPlugin(Plugin):
         if not contents:
             return
         self.files = contents
+
+    def save_password(self, pwd):
+        """ Save the password for the current connection """
+        self.passwords[self.board.connection.name] = pwd

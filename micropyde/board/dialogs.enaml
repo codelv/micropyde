@@ -26,7 +26,6 @@ from enaml.widgets.api import (
 from serial.tools.list_ports import comports
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import Deferred
-from .plugin import DevicePlugin
 
 
 class FlashProcessProtocol(ProcessProtocol):
@@ -80,6 +79,8 @@ enamldef FlashDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
+                    attr matches = [p for p in self.items if p.device == plugin.port]
+                    selected << matches[0] if matches else None
                     selected ::
                         plugin.port = change['value'].device
                 PushButton: btn:
@@ -104,17 +105,17 @@ enamldef FlashDialog(Dialog): dialog:
                     text = 'Chip (--chip)'
                 ObjectCombo:
                     items = list(EditorPlugin.flash_chip.items)
-                    selected :: plugin.flash_chip = change['value']
+                    selected := plugin.flash_chip
                 Label:
                     text = 'Mode (-fm)'
                 ObjectCombo:
                     items = list(EditorPlugin.flash_mode.items)
-                    selected :: plugin.flash_mode = change['value']
+                    selected := plugin.flash_mode
                 Label:
                     text = "Frequency (-ff)"
                 ObjectCombo:
                     items = list(EditorPlugin.flash_freq.items)
-                    selected :: plugin.flash_freq = change['value']
+                    selected := plugin.flash_freq
                 Label:
                     text = "SPI Connection"
                 Field:
@@ -336,4 +337,57 @@ enamldef BoardInfoDialog(Dialog): dialog:
                 clicked :: dialog.close()
             PushButton: btn_yes:
                 text = "Get"
+                clicked :: run()
+
+
+enamldef PasswordDialog(Dialog): dialog:
+    title = 'Board Login'
+    attr command
+    attr event
+    attr plugin #: A BoardPlugin
+    attr view #: A TerminalDockItem
+    initial_size = (640, 320)
+    func run():
+        if save.checked:
+            plugin.save_password(pwd.text)
+        view.write_text(pwd.text)
+        dialog.close()
+
+    TaskDialogStyleSheet:
+            pass
+    TaskDialogBody:
+        TaskDialogInstructionArea:
+            Label:
+                style_class = 'task-dialog-instructions'
+                text = 'Board login'
+        TaskDialogContentArea:
+            Label:
+                style_class = 'task-dialog-content'
+                text = 'Enter password to login'
+            Form:
+                Label:
+                    text = "Password"
+                Field: pwd:
+                    submit_triggers = ['auto_sync']
+                    echo_mode << 'normal' if show.checked else 'password'
+                Label:
+                    pass
+                CheckBox: show:
+                    text = "Show password"
+            Label:
+                text = "Warning: Saved passwords are stored in plain text!"
+
+        TaskDialogCommandArea:
+            constraints = [
+                hbox(save, spacer, btn_yes, btn_no),
+                align('v_center', save, btn_yes, btn_no)
+            ]
+            CheckBox: save:
+                text = "Save password"
+            PushButton: btn_no:
+                text << "Cancel"
+                clicked :: dialog.close()
+            PushButton: btn_yes:
+                text = "Login"
+                enabled << len(pwd.text)>=4
                 clicked :: run()

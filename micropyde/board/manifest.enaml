@@ -74,6 +74,10 @@ enamldef BoardManifest(PluginManifest):
             label = 'Board'
             after = 'examples'
             before = 'settings'
+            ItemGroup:
+                id = 'scripts'
+            ItemGroup:
+                id = 'flash'
         ActionItem:
             path = '/board/run'
             label = 'Run'
