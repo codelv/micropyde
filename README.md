@@ -2,7 +2,7 @@
 
 An IDE for micropython. 
 
-Please note this is currently in alpha.
+> Please note this is currently in alpha. 
 
 ### Features
 
@@ -50,4 +50,4 @@ Released under the GPL v3.
 ### Donate
 
 If you would like to support the development of this project. 
-Please [donate]() 
+Please [donate](https://www.codelv.com/donate/) and let me know! 
