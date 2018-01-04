@@ -2,33 +2,52 @@
 
 An IDE for micropython. 
 
+Please note this is currently in alpha.
+
 ### Features
 
 1. Editor using Scintilla
-2. Serial Monitor / COM Terminal
+2. "Serial Monitor" with com and websocket support
 3. Flashing with esptool
-4. Script run and upload
+4. Script run and upload (WIP)
 
 ### Supports
 
-As of now the esp8266 (may do others, haven't tested)
+As of now the esp8266 (should work with others, haven't tested)
 
-### HiLite esp8266
+### Installing
 
-Pinout
-1 - Reset?
-2 - Blue LED - Default HIGH
-3 - Dead - Must be high CH3
-4 - Works - CH 2 - Default LOW
-5 - Works - CH 1 - Default LOW
-6 - Invalid PIN
-7 - Invalid PIN
-8 - Invalid PIN
-9 - Reset ? 
-10 - Works - IDK
-11 - Invalid PIN
-12 - Works - IDK
-13 - Works - IDK
-14 - Works - IDK - Default HIGH
-15 - Works - IDK
-16 - Red LED  - Default HIGH
+Build from source
+
+```bash
+
+#: Clone
+git clone https://github.com/codelv/micropyde
+cd micropyde
+
+#: Make venv
+virtualenv -p python3 venv
+source venv/bin/activate
+
+#: Install my enaml fork
+pip install git+https://github.com/frmdstryr/enaml@latest
+
+#: Build
+pip install .
+
+#: Run
+python main.py
+
+
+```
+
+
+
+### License
+
+Released under the GPL v3.
+
+### Donate
+
+If you would like to support the development of this project. 
+Please [donate]() 

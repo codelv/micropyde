@@ -45,6 +45,7 @@ enamldef EditorSettingsPage(Container):
             text = ""
         Field:
             text := model.project_path
+            tool_tip = "Path where new files will be created"
         PushButton:
             text = "Browse"
             clicked :: FileDialogEx.get_existing_directory(
@@ -65,6 +66,7 @@ enamldef EditorSettingsPage(Container):
             text = ""
         Field:
             text := model.upy_path
+            tool_tip = "Path to micropython source to pull modules for code inspection"
         PushButton:
             text = "Browse"
             clicked :: FileDialogEx.get_existing_directory(
@@ -76,6 +78,7 @@ enamldef EditorSettingsPage(Container):
             text = ""
         Field:
             text := model.upy_lib_path
+            tool_tip = "Path to micropython-lib to pull modules for code inspection"
         PushButton:
             text = "Browse"
             clicked :: FileDialogEx.get_existing_directory(
