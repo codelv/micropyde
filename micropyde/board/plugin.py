@@ -7,6 +7,7 @@ The full license is in the file LICENSE, distributed with this software.
 
 @author: jrm
 """
+import os
 import socket
 import hashlib
 import textwrap
@@ -351,6 +352,7 @@ class BoardPlugin(Plugin):
     # -------------------------------------------------------------------------
     @inlineCallbacks
     def upload_file(self, event):
+        print("Uploading current file...")
         editor = self.workbench.get_plugin("micropyde.editor")
         terminal = editor.get_terminal()
         if not terminal.opened:
@@ -395,11 +397,9 @@ class BoardPlugin(Plugin):
                     except Exception as e:
                         print(e)
                     finally:
-                        f.close()   
-                    
-                        
+                        f.close()               
                 __uploader__()""".format(
-            file=path,
+            file=os.path.split(path)[-1],
             len=len(source)  #: Test...
         )).encode()+b'\n\x04')
 
@@ -408,7 +408,7 @@ class BoardPlugin(Plugin):
         n = 0
         chunk = 64
         #: Sleep
-        yield async_sleep(100)
+        yield async_sleep(1000)
 
         while True:
             wrote = min(i-n, chunk)
@@ -564,3 +564,4 @@ class BoardPlugin(Plugin):
     def save_password(self, pwd):
         """ Save the password for the current connection """
         self.passwords[self.board.connection.name] = pwd
+        self.save()
