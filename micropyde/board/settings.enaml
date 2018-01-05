@@ -81,6 +81,12 @@ enamldef BoardSettingsPage(Container):
         typemap = {SerialConnection: SerialConnectionForm,
                    WebsocketConnection: WebsocketConnectionForm}
 
+    Label:
+        text = "Passwords"
+    PushButton:
+        text = "Clear passwords"
+        clicked :: model.passwords = {}
+
 
 
 
