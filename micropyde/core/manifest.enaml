@@ -40,7 +40,7 @@ def window_factory(workbench):
     import enaml
     with enaml.imports():
         from enaml.workbench.ui.workbench_window import WorkbenchWindow
-    return WorkbenchWindow(initial_size=(960, 480))
+    return WorkbenchWindow(initial_size=(960, 640))
 
 
 def workspace_factory(workbench):

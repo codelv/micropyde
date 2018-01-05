@@ -360,6 +360,12 @@ class BoardPlugin(Plugin):
         source = editor.get_editor().get_text().encode()
         path = editor.active_document.name
         board = self.board
+
+        hash = hashlib.sha256()
+        hash.update(source)
+        expected_hash = hash.hexdigest()
+        print("Expected Hash: {}".format(expected_hash))
+
         board.write(b'\n\x05'+textwrap.dedent("""
                 def __uploader__():
                     import sys
@@ -375,7 +381,7 @@ class BoardPlugin(Plugin):
                             chunk = min(i-n, chunk)
                             #print("Reading %i..."%chunk)
                             n += f.write(sys.stdin.read(chunk))
-                            print('Uploaded %i of %i'%(n,i))
+                            print('Uploaded: %i of %i'%(n,i))
                     except Exception as e:
                         print(e)
                     finally:
@@ -391,16 +397,26 @@ class BoardPlugin(Plugin):
                             if not data:
                                 break
                             hash.update(data)
-                        print("Upload finished sha256={{}}.".format(
-                            ubinascii.hexlify(hash.digest())
+                        upload_hash = ubinascii.hexlify(hash.digest())
+                        expected_hash = b'{expected_hash}'
+                        print("Expected hash: {{}}".format(
+                            expected_hash
                         ))
+                        print("Actual hash:   {{}}".format(
+                            upload_hash
+                        ))
+                        if upload_hash==expected_hash:
+                            print("Upload success!")
+                        else:
+                            print("Upload failed (hash mismatch)!")
                     except Exception as e:
                         print(e)
                     finally:
                         f.close()               
                 __uploader__()""".format(
             file=os.path.split(path)[-1],
-            len=len(source)  #: Test...
+            expected_hash=expected_hash,
+            len=len(source) #: Test...
         )).encode()+b'\n\x04')
 
         #: Have to write to the port slowly... not sure why?
@@ -420,10 +436,6 @@ class BoardPlugin(Plugin):
 
             #: Sleep
             yield async_sleep(100)
-
-        hash = hashlib.sha256()
-        hash.update(source)
-        print("Expected Hash: {}".format(hash.hexdigest()))
 
     def run_script(self, event):
         #: Open the port and let it read
