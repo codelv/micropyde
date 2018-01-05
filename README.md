@@ -6,10 +6,23 @@ An IDE for micropython.
 
 ### Features
 
-1. Editor using Scintilla
+1. Editor using Scintilla with code hinting
 2. "Serial Monitor" with com and websocket support
 3. Flashing with esptool
 4. Script run and upload (WIP)
+
+##### Flashing
+
+![Micropython IDE - Esptool flashing](https://user-images.githubusercontent.com/380158/34588508-5e571d04-f17b-11e7-99d2-db6db8244fbd.gif)
+
+##### Code hinting and function tips
+
+![Micropython IDE - Code hints and function tips](https://user-images.githubusercontent.com/380158/34588552-9cdef0e2-f17b-11e7-93b0-fbd0ba570d2e.gif)
+
+##### Websocket support
+
+![Miroypthon IDE - Websocket repl](https://user-images.githubusercontent.com/380158/34588596-db8b240a-f17b-11e7-9cfd-da0331dc865f.gif)
+
 
 ### Supports
 
