@@ -75,5 +75,5 @@ def menu_icon(name):
 
 def async_sleep(ms):
     d = Deferred()
-    timed_call(ms, d.callback)
+    timed_call(ms, d.callback, True)
     return d
