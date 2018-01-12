@@ -40,7 +40,11 @@ def window_factory(workbench):
     import enaml
     with enaml.imports():
         from enaml.workbench.ui.workbench_window import WorkbenchWindow
-    return WorkbenchWindow(initial_size=(960, 640))
+    from .utils import load_icon
+    return WorkbenchWindow(
+        initial_size=(960, 640),
+        icon=load_icon('micropyde')
+    )
 
 
 def workspace_factory(workbench):
