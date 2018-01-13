@@ -8,6 +8,7 @@ The full license is in the file LICENSE, distributed with this software.
 @author: jrm
 """
 import os
+import enaml
 import socket
 import hashlib
 import textwrap
@@ -86,6 +87,7 @@ class SerialConnection(Connection):
                     protocol, self.port, reactor,
                     baudrate=self.baudrate)
                 d.callback(True)
+                log.debug("{} connected!".format(self.port))
             except Exception as e:
                 d.callback(e)
         deferred_call(do_connect)
@@ -100,6 +102,7 @@ class SerialConnection(Connection):
         """ """
         s = self.serial_port
         if s:
+            log.debug("{} disconnected!".format(self.port))
             s.loseConnection()
             self.serial_port = None
 
@@ -129,14 +132,14 @@ class WebsocketConnection(Connection):
 
     def is_available(self):
         try:
-            print("Testing connection to: {}:{}".format(self.address,
+            log.info("Testing connection to: {}:{}".format(self.address,
                                                         self.port))
             s = socket.create_connection((self.address, self.port), 0.2)
             s.close()
-            print("ws REPL available!")
+            log.info("ws REPL available!")
             return True
         except Exception as e:
-            print("ws REPL unavailable: {}".format(e))
+            log.info("ws REPL unavailable: {}".format(e))
             return False
 
     def scan_subnet(self):
@@ -182,12 +185,19 @@ class WebsocketConnection(Connection):
 
             def onConnect(self, response):
                 this.connection = self
+                self.delegate.transport = self.transport
+                d.callback(self)
+                log.debug("ws://{}:{} connected!".format(this.address,
+                                                 this.port))
                 self.delegate.connectionMade()
 
             def onMessage(self, payload, isBinary):
                 self.delegate.dataReceived(payload)
 
             def onClose(self, wasClean, code, reason):
+                log.debug("ws://{}:{} disconnected: "
+                          "clean={} code={} reason={}!".format(
+                    this.address, this.port, wasClean, code, reason))
                 self.delegate.connectionLost(reason)
 
         factory.protocol = DelegateProtocol
@@ -272,10 +282,12 @@ class QueryProtocol(LineReceiver):
     using help(module) calls.
     
     """
-    timeout = 0.1
+    timeout = 100
 
-    def __init__(self):
+    def __init__(self, plugin):
+        self.plugin = plugin
         self.connect_event = Deferred()
+        self.logged_in = Deferred()
         self.request = None
 
     def ready(self):
@@ -283,11 +295,28 @@ class QueryProtocol(LineReceiver):
 
     def connectionMade(self):
         self.lines = []
+        #: If websocket we have to wait for the password first
         self.connect_event.callback(True)
 
+    @inlineCallbacks
+    def login(self):
+        """ Wait a little for a password prompt 
+        
+        """
+        #: Wait for it to connect
+        yield self.ready()
+
+        #: Then wait for the password prompt
+        yield async_sleep(300)
+        log.debug(self._buffer)
+        if 'Password:' in self._buffer.decode():
+            #: Hack
+            yield self.plugin.show_password_prompt()
+
+
     def lineReceived(self, line):
+        log.debug(line)
         self.lines.append(line.decode())
-        print(line)
         if self.request:
             self.pending += 1
             timed_call(self.timeout, self.finish)
@@ -315,6 +344,7 @@ class QueryProtocol(LineReceiver):
         self.pending = 0
         self.lines = []
         self.request = Deferred()
+
         #: Add a cancel timeout
         # def cancel():
         #     d = self.request
@@ -352,7 +382,7 @@ class BoardPlugin(Plugin):
     # -------------------------------------------------------------------------
     @inlineCallbacks
     def upload_file(self, event):
-        print("Uploading current file...")
+        log.info("Uploading current file...")
         editor = self.workbench.get_plugin("micropyde.editor")
         terminal = editor.get_terminal()
         if not terminal.opened:
@@ -364,56 +394,57 @@ class BoardPlugin(Plugin):
         hash = hashlib.sha256()
         hash.update(source)
         expected_hash = hash.hexdigest()
-        print("Expected Hash: {}".format(expected_hash))
+        log.info("Expected Hash: {}".format(expected_hash))
 
+        #: TODO: Apparently this is to big to send over the websocket...
         board.write(b'\n\x05'+textwrap.dedent("""
-                def __uploader__():
-                    import sys
-                    import uhashlib
-                    import ubinascii
-                    print("Uploading file...")
-                    f = open('{file}','wb')
-                    try:
-                        i = {len}
-                        n = 0
-                        chunk = 64
-                        while n < i:
-                            chunk = min(i-n, chunk)
-                            #print("Reading %i..."%chunk)
-                            n += f.write(sys.stdin.read(chunk))
-                            print('Uploaded: %i of %i'%(n,i))
-                    except Exception as e:
-                        print(e)
-                    finally:
-                        f.close()
-                    #: Verify
-                    try:
-                        print("Verifying...")
-                        f = open('{file}', 'rb')
-                        hash = uhashlib.sha256()
-                        while True:
-                            data = f.read(64)
-                            #print(data)
-                            if not data:
-                                break
-                            hash.update(data)
-                        upload_hash = ubinascii.hexlify(hash.digest())
-                        expected_hash = b'{expected_hash}'
-                        print("Expected hash: {{}}".format(
-                            expected_hash
-                        ))
-                        print("Actual hash:   {{}}".format(
-                            upload_hash
-                        ))
-                        if upload_hash==expected_hash:
-                            print("Upload success!")
-                        else:
-                            print("Upload failed (hash mismatch)!")
-                    except Exception as e:
-                        print(e)
-                    finally:
-                        f.close()               
-                __uploader__()""".format(
+            def __uploader__():
+                import sys
+                import uhashlib
+                import ubinascii
+                log.info("Uploading file...")
+                f = open('{file}','wb')
+                try:
+                    i = {len}
+                    n = 0
+                    chunk = 64
+                    while n < i:
+                        chunk = min(i-n, chunk)
+                        #log.info("Reading %i..."%chunk)
+                        n += f.write(sys.stdin.read(chunk))
+                        log.info('Uploaded: %i of %i'%(n,i))
+                except Exception as e:
+                    log.info(e)
+                finally:
+                    f.close()
+                #: Verify
+                try:
+                    log.info("Verifying...")
+                    f = open('{file}', 'rb')
+                    hash = uhashlib.sha256()
+                    while True:
+                        data = f.read(64)
+                        #log.info(data)
+                        if not data:
+                            break
+                        hash.update(data)
+                    upload_hash = ubinascii.hexlify(hash.digest())
+                    expected_hash = b'{expected_hash}'
+                    log.info("Expected hash: {{}}".format(
+                        expected_hash
+                    ))
+                    log.info("Actual hash:   {{}}".format(
+                        upload_hash
+                    ))
+                    if upload_hash==expected_hash:
+                        log.info("Upload success!")
+                    else:
+                        log.info("Upload failed (hash mismatch)!")
+                except Exception as e:
+                    log.info(e)
+                finally:
+                    f.close()               
+            __uploader__()""".format(
             file=os.path.split(path)[-1],
             expected_hash=expected_hash,
             len=len(source) #: Test...
@@ -453,20 +484,21 @@ class BoardPlugin(Plugin):
     # -------------------------------------------------------------------------
     @inlineCallbacks
     def build_index(self, event):
-        print("build index")
+        log.info("build index")
         excluded = ['http_server', 'http_server_ssl']
         board = self.board
 
+        #: Reconnect with a different protocol
         board.disconnect()
-        device = QueryProtocol()
-
-        board.connect(device)
-
+        device = QueryProtocol(self)
+        yield board.connect(device)
         self.indexing_progress = 0
         self.indexing_status = "Connecting...."
-        yield device.ready()
+        yield device.login()
+
+        #: Now query
         result = yield device.query(b"\r\nhelp('modules')")
-        print(result)
+        log.info(result)
         modules = []
         for line in result:
             if 'help(' not in line and 'on the filesystem' not in line:
@@ -526,7 +558,7 @@ class BoardPlugin(Plugin):
     #             with open('modules.json', 'w') as f:
     #                 f.write(index)
     #         except Exception as e:
-    #             print("Failed to save module index: {}".format(e))
+    #             log.info("Failed to save module index: {}".format(e))
 
     # -------------------------------------------------------------------------
     # File Browser API
@@ -538,11 +570,11 @@ class BoardPlugin(Plugin):
 
         board = self.board
         board.disconnect()
-        device = QueryProtocol()
-        board.connect(device)
+        device = QueryProtocol(self)
+        yield board.connect(device)
         self.scanning_progress = 0
         self.scanning_status = "Connecting...."
-        yield device.ready()
+        yield device.login()
 
         result = yield device.query(b'\n\x05'+textwrap.dedent("""
         def __scanfiles__(path):
@@ -559,15 +591,16 @@ class BoardPlugin(Plugin):
                 pass
             return files
         __scanfiles__('.')
-        """).encode()+b'\n\x04', raw=True, timeout=1)
-
+        """).encode()+b'\n\x04', raw=True, timeout=200)
+        log.debug("Scan complete!")
         contents = {}
         for line in result:
             try:
                 contents = eval(line)
+                log.debug("Loaded!")
                 break
-            except:
-                pass
+            except Exception as e:
+                log.debug(e)
         #: TODO: Walk...
         if not contents:
             return
@@ -577,3 +610,25 @@ class BoardPlugin(Plugin):
         """ Save the password for the current connection """
         self.passwords[self.board.connection.name] = pwd
         self.save()
+
+    def show_password_prompt(self):
+        """ Probably shouldn't go here but whatever """
+        d = Deferred()
+        ui = self.workbench.get_plugin('micropyde.ui')
+        with enaml.imports():
+            from .dialogs import PasswordDialog
+
+        board = self.board
+
+        #: Check for a saved password
+        pwd = self.passwords.get(board.connection.name)
+
+        if pwd:
+            txt = pwd+"\r\n"
+            self.board.write(txt.encode())
+            d.callback(txt)
+        else:
+            PasswordDialog(ui.get_dock_area(),
+                           plugin=self,
+                           callback=d.callback).exec_()
+        return d

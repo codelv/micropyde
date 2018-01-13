@@ -51,21 +51,12 @@ class TerminalProtocol(Protocol):
                 listener(data)
 
             if "Password:" in data:
-                self.onPassword()
+                self.view.plugin.show_password_prompt()
+
         except Exception as e:
             print("Failed to read output: {}".format(e))
 
-    def onPassword(self):
-        """ Probably shouldn't go here but whatever """
-        view = self.view
-        plugin = view.plugin
 
-        #: Check for a saved password
-        pwd = plugin.passwords.get(plugin.board.connection.name)
-        if pwd:
-            view.write_text(pwd)
-        else:
-            PasswordDialog(view, plugin=view.plugin, view=view).exec_()
 
 
 enamldef MonitorDockItem(DockItem): view:

@@ -345,14 +345,8 @@ enamldef PasswordDialog(Dialog): dialog:
     attr command
     attr event
     attr plugin #: A BoardPlugin
-    attr view #: A TerminalDockItem
+    attr callback = lambda pwd: None
     initial_size = (640, 320)
-    func run():
-        if save.checked:
-            plugin.save_password(pwd.text)
-        view.write_text(pwd.text)
-        dialog.close()
-
     TaskDialogStyleSheet:
             pass
     TaskDialogBody:
@@ -364,6 +358,62 @@ enamldef PasswordDialog(Dialog): dialog:
             Label:
                 style_class = 'task-dialog-content'
                 text = 'Enter password to login'
+            Form:
+                Label:
+                    text = "Password"
+                Field: pwd:
+                    submit_triggers = ['auto_sync']
+                    echo_mode << 'normal' if show.checked else 'password'
+                Label:
+                    pass
+                CheckBox: show:
+                    text = "Show password"
+            Label:
+                text = "Warning: Saved passwords are stored in plain text!"
+
+        TaskDialogCommandArea:
+            constraints = [
+                hbox(save, spacer, btn_yes, btn_no),
+                align('v_center', save, btn_yes, btn_no)
+            ]
+            CheckBox: save:
+                text = "Save password"
+            PushButton: btn_no:
+                text << "Cancel"
+                clicked ::
+                    dialog.callback(None)
+                    dialog.close()
+            PushButton: btn_yes:
+                text = "Login"
+                enabled << len(pwd.text)>=4
+                clicked ::
+                    if save.checked:
+                        plugin.save_password(pwd.text)
+                    plugin.board.write((pwd.text+"\r\n").encode())
+                    dialog.callback(pwd.text)
+                    dialog.close()
+
+
+
+enamldef ProgressDialog(Dialog): dialog:
+    attr command
+    attr event
+    attr plugin #: A BoardPlugin
+    attr view #: A TerminalDockItem
+    initial_size = (640, 320)
+    title = 'Progress'
+    attr caption = "Task is in progress..."
+    TaskDialogStyleSheet:
+            pass
+    TaskDialogBody:
+        TaskDialogInstructionArea:
+            Label:
+                style_class = 'task-dialog-instructions'
+                text << dialog.title
+        TaskDialogContentArea:
+            Label:
+                style_class = 'task-dialog-content'
+                text << dialog.caption
             Form:
                 Label:
                     text = "Password"

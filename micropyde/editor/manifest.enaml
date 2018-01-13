@@ -238,11 +238,11 @@ enamldef EditorManifest(PluginManifest):
             factory = editor_item_factory
             layout = 'main'
         DockItem:
-            plugin_id = 'micropyde.editor'
+            plugin_id = 'micropyde.board'
             factory = modules_item_factory
             layout = 'left'
         DockItem:
-            plugin_id = 'micropyde.editor'
+            plugin_id = 'micropyde.board'
             factory = browser_item_factory
             layout = 'left'
         DockItem:
