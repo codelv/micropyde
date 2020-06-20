@@ -55,16 +55,19 @@ enamldef BoardManifest(PluginManifest):
         point = 'enaml.workbench.core.commands'
         Command:
             id = 'micropyde.board.upload_file'
-            handler = lambda event:plugin_command('upload_file', event)
+            handler = lambda event: plugin_command('upload_file', event)
+        Command:
+            id = 'micropyde.board.download_file'
+            handler = lambda event: plugin_command('download_file', event)
         Command:
             id = 'micropyde.board.run_script'
-            handler = lambda event:plugin_command('run_script', event)
+            handler = lambda event: plugin_command('run_script', event)
         Command:
             id = 'micropyde.board.build_index'
-            handler = lambda event:plugin_command('build_index', event)
+            handler = lambda event: plugin_command('build_index', event)
         Command:
             id = 'micropyde.board.scan_files'
-            handler = lambda event:plugin_command('scan_files', event)
+            handler = lambda event: plugin_command('scan_files', event)
 
     Extension:
         id = 'actions'

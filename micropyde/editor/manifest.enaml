@@ -143,7 +143,7 @@ enamldef EditorManifest(PluginManifest):
         point = 'enaml.workbench.core.commands'
         Command:
             id = 'micropyde.editor.close_file'
-            handler = lambda event:plugin_command('close_file', event)
+            handler = lambda event: plugin_command('close_file', event)
         Command:
             id = 'micropyde.editor.save_file'
             handler = save_file

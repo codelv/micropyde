@@ -12,6 +12,7 @@ import enaml
 import socket
 import hashlib
 import textwrap
+from base64 import b64decode
 from atom.api import Dict, Int, Instance, Unicode, List, observe
 from autobahn.twisted.websocket import (
     WebSocketClientFactory, WebSocketClientProtocol
@@ -29,8 +30,8 @@ from micropyde.core.utils import async_sleep, log
 
 
 class Connection(Model):
-    """ The abstract connection protocol 
-    
+    """ The abstract connection protocol
+
     """
 
     #: The connection name
@@ -220,7 +221,7 @@ class WebsocketConnection(Connection):
 class Board(Model):
     """ Abstraction layer over a board that allows connections via
     websocket or serial using the same interface
-    
+
     """
 
     #: List of connections configured
@@ -280,7 +281,7 @@ class Board(Model):
 class QueryProtocol(LineReceiver):
     """ Handles inspecting the modules on a micropython device
     using help(module) calls.
-    
+
     """
     timeout = 100
 
@@ -300,8 +301,8 @@ class QueryProtocol(LineReceiver):
 
     @inlineCallbacks
     def login(self):
-        """ Wait a little for a password prompt 
-        
+        """ Wait a little for a password prompt
+
         """
         #: Wait for it to connect
         yield self.ready()
@@ -312,7 +313,6 @@ class QueryProtocol(LineReceiver):
         if 'Password:' in self._buffer.decode():
             #: Hack
             yield self.plugin.show_password_prompt()
-
 
     def lineReceived(self, line):
         log.debug(line)
@@ -332,9 +332,9 @@ class QueryProtocol(LineReceiver):
 
     def query(self, msg, raw=False, timeout=None):
         """ Send a command and wait for it to reply
-        :param msg: 
-        :param timeout: 
-        :return: 
+        :param msg:
+        :param timeout:
+        :return:
         """
         if self.request is not None:
             #: Only allow one at a time
@@ -380,6 +380,62 @@ class BoardPlugin(Plugin):
     # -------------------------------------------------------------------------
     # Board API
     # -------------------------------------------------------------------------
+    @inlineCallbacks
+    def download_file(self, event):
+        """ Download a file from tne board
+
+        """
+        path = event.parameters['path']
+        editor = self.workbench.get_plugin("micropyde.editor")
+
+        log.info("Download file from device '%s'..." % path)
+
+        # Connect
+        board = self.board
+        board.disconnect()
+        device = QueryProtocol(self)
+        yield board.connect(device)
+        yield device.login()
+        log.info("Downloading...")
+        result = yield device.query(b'\n\x05' + textwrap.dedent("""
+            def __downloader__():
+                import sys
+                from ubinascii import b2a_base64
+                f = open('{path}', 'rb')
+                while True:
+                    d = f.read(256)
+                    if not d:
+                        break
+                    sys.stdout.write(b2a_base64(d))
+                f.close()
+            __downloader__()""".format(
+                path=path
+        )).encode() + b'\x04', timeout=1000)
+
+        log.info(result)
+        source = []
+        start, end = 0, -1
+        for i, line in enumerate(result):
+            if "__downloader__" in line:
+                start = i+1
+            elif line.startswith(">>>"):
+                end = i
+        source = result[start:end]
+
+        if not source:
+            log.warning("Failed to download file: '%s'" % result)
+            return
+        download_path = os.path.join(editor.project_path, path)
+        with open(download_path, 'wb') as f:
+            for chunk in source:
+                log.info(chunk)
+                data = b64decode(chunk)
+                f.write(data)
+
+        core = self.workbench.get_plugin('enaml.workbench.core')
+        core.invoke_command("micropyde.editor.open_file",
+                            parameters={'path': download_path})
+
     @inlineCallbacks
     def upload_file(self, event):
         log.info("Uploading current file...")
@@ -443,7 +499,7 @@ class BoardPlugin(Plugin):
                 except Exception as e:
                     log.info(e)
                 finally:
-                    f.close()               
+                    f.close()
             __uploader__()""".format(
             file=os.path.split(path)[-1],
             expected_hash=expected_hash,

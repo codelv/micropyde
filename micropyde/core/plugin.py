@@ -40,7 +40,7 @@ class CorePlugin(Plugin):
 
         #: Log to stdout
         stream = logging.StreamHandler(sys.stdout)
-        stream.setLevel(logging.DEBUG)
+        stream.setLevel(logging.INFO)
         stream.setFormatter(formatter)
 
         #: Log to rotating handler

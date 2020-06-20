@@ -9,7 +9,9 @@ The full license is in the file LICENSE, distributed with this software.
 """
 from enaml.core.api import Conditional, Looper
 from enaml.core.dynamic_template import DynamicTemplate
-from enaml.widgets.api import Container, PushButton, ProgressBar, Label, Field
+from enaml.widgets.api import (
+    Container, PushButton, ProgressBar, Label, Field, Menu, Action
+)
 from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
 from micropyde.core.utils import load_icon
 from micropyde.core.api import DockItem
@@ -52,11 +54,19 @@ template AutoTreeItemNode(files):
 enamldef AutoTreeItem(TreeViewItem):
     """ File browser Tree node"""
     attr item
+    attr path = item[0]
     attr spec = item[1]
     attr info = spec.get('info', ['' for i in range(10)])
-    text << '{}'.format(item[0])
+    text << '{}'.format(path)
     items << list(sorted(spec.get('files', {}).items(),
                      key=lambda p: p[0]))
+    Menu:
+        Action:
+            text = "Download from board"
+            triggered ::
+                core = plugin.workbench.get_plugin('enaml.workbench.core')
+                core.invoke_command('micropyde.board.download_file',
+                                    parameters={'path': path})
     DynamicTemplate:
         base = AutoTreeItemNode
         args = (tuple(items),)
@@ -100,7 +110,7 @@ enamldef FileBrowserView(Container):
             text << plugin.scanning_status
     PushButton:
         icon = load_icon("arrow_refresh")
-        text = "refresh"
+        text = "Refresh"
         clicked ::
             core = plugin.workbench.get_plugin('enaml.workbench.core')
             core.invoke_command('micropyde.board.scan_files')

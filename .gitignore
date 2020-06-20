@@ -105,3 +105,4 @@ ENV/
 .kdev4/
 *.kdev4
 *.db
+scripts/
