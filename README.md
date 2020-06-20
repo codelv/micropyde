@@ -1,8 +1,8 @@
 # Micropyde
 
-An IDE for micropython. 
+An IDE for micropython.
 
-> Please note this is currently in alpha. 
+> Please note this is currently in alpha.
 
 ### Features
 
@@ -42,14 +42,11 @@ cd micropyde
 virtualenv -p python3 venv
 source venv/bin/activate
 
-#: Install my enaml fork
-pip install git+https://github.com/frmdstryr/enaml@latest
-
 #: Build
-pip install .
+pip install -e .
 
 #: Run
-python main.py
+micropyde
 
 
 ```
@@ -62,5 +59,5 @@ Released under the GPL v3.
 
 ### Donate
 
-If you would like to support the development of this project. 
-Please [donate](https://www.codelv.com/donate/) and let me know! 
+If you would like to support the development of this project.
+Please [donate](https://www.codelv.com/donate/) and let me know!

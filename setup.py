@@ -22,9 +22,12 @@ setup(
   packages=find_packages(),
   include_package_data=True,
   version='1.0',
+  entry_points={
+        'console_scripts': ['micropyde = micropyde.app:main'],
+    },
   install_requires=[
       'PyQt5', 'enaml', 'enamlx', 'QScintilla', 'twisted', 'autobahn',
-      'qt5reactor', 'qtconsole', 'jsonpickle', 'pozetron-cli', 'jedi',
+      'qt5reactor', 'qtconsole', 'jsonpickle', 'jedi',
       'pyserial', 'pyflakes', 'esptool',
   ],
 )

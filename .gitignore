@@ -1,5 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+__enamlcache__/
+*.enamlc
 *.py[cod]
 *$py.class
 
@@ -99,3 +101,7 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+.kdev4/
+*.kdev4
+*.db

@@ -97,7 +97,7 @@ enamldef FlashDialog(Dialog): dialog:
                 SpinBox:
                     value := plugin.flash_baud
                     minimum = 0
-                    maximum = 99999999
+                    maximum = 2**31 - 1
                 Label:
                     text = 'Chip (--chip)'
                 ObjectCombo:
@@ -129,7 +129,7 @@ enamldef FlashDialog(Dialog): dialog:
                     text = 'Address'
                 SpinBox:
                     minimum = 0
-                    maximum = 99999999999 #: Ummm 16 meg
+                    maximum = 2**31 - 1  #: Ummm 16 meg
                     value := plugin.flash_address
                 Label:
                     text = 'Filename'
@@ -247,7 +247,7 @@ class InfoProcessProtocol(ProcessProtocol):
     Device: 4016
     Detected flash size: 4MB
     Hard resetting...
-    
+
     esptool.py --port /dev/ttyUSB0 chip_id
     esptool.py v2.1
     Connecting....
@@ -259,8 +259,8 @@ class InfoProcessProtocol(ProcessProtocol):
     Chip ID: 0x0066f213
     Hard resetting...
 
-    
-    
+
+
     """
 
     def __init__(self, view):
