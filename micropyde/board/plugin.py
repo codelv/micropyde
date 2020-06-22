@@ -440,12 +440,14 @@ class BoardPlugin(Plugin):
     def upload_file(self, event):
         log.info("Uploading current file...")
         editor = self.workbench.get_plugin("micropyde.editor")
-        terminal = editor.get_terminal()
-        if not terminal.opened:
-            terminal.toggle_port()
         source = editor.get_editor().get_text().encode()
         path = editor.active_document.name
+
         board = self.board
+        board.disconnect()
+        device = QueryProtocol(self)
+        yield board.connect(device)
+        yield device.login()
 
         hash = hashlib.sha256()
         hash.update(source)
@@ -458,7 +460,7 @@ class BoardPlugin(Plugin):
                 import sys
                 import uhashlib
                 import ubinascii
-                log.info("Uploading file...")
+                print("Uploading file...")
                 f = open('{file}','wb')
                 try:
                     i = {len}
@@ -466,38 +468,36 @@ class BoardPlugin(Plugin):
                     chunk = 64
                     while n < i:
                         chunk = min(i-n, chunk)
-                        #log.info("Reading %i..."%chunk)
                         n += f.write(sys.stdin.read(chunk))
-                        log.info('Uploaded: %i of %i'%(n,i))
+                        print('Uploaded: %i of %i'%(n,i))
                 except Exception as e:
-                    log.info(e)
+                    print(e)
                 finally:
                     f.close()
                 #: Verify
                 try:
-                    log.info("Verifying...")
+                    print("Verifying...")
                     f = open('{file}', 'rb')
                     hash = uhashlib.sha256()
                     while True:
                         data = f.read(64)
-                        #log.info(data)
                         if not data:
                             break
                         hash.update(data)
                     upload_hash = ubinascii.hexlify(hash.digest())
                     expected_hash = b'{expected_hash}'
-                    log.info("Expected hash: {{}}".format(
+                    print("Expected hash: {{}}".format(
                         expected_hash
                     ))
-                    log.info("Actual hash:   {{}}".format(
+                    print("Actual hash:   {{}}".format(
                         upload_hash
                     ))
-                    if upload_hash==expected_hash:
-                        log.info("Upload success!")
+                    if upload_hash == expected_hash:
+                        print("Upload success!")
                     else:
-                        log.info("Upload failed (hash mismatch)!")
+                        print("Upload failed (hash mismatch)!")
                 except Exception as e:
-                    log.info(e)
+                    print(e)
                 finally:
                     f.close()
             __uploader__()""".format(

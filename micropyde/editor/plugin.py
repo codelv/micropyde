@@ -17,17 +17,22 @@ from atom.api import (
     ContainerList, observe
 )
 
-from micropyde.core.api import Plugin, Model
-from enaml.layout.api import InsertTab, RemoveItem
+from micropyde.core.api import Plugin, Model, log
+from enaml.layout.api import InsertItem, InsertTab, RemoveItem
 from enaml.application import timed_call
 
 from . import inspection
 from enaml.scintilla.themes import THEMES
 
 
-def EditorItem(*args, **kwargs):
+def editor_item_factory():
     with enaml.imports():
         from .editor import EditorDockItem
+    return EditorDockItem
+
+
+def create_editor_item(*args, **kwargs):
+    EditorDockItem = editor_item_factory()
     return EditorDockItem(*args, **kwargs)
 
 
@@ -76,7 +81,7 @@ class Document(Model):
 
     def _update_errors(self, change):
         """ Parse the source and try to detect any errors
-         
+
         """
         if self.errors and change['type'] == 'create':
             #: Don't squash load errors
@@ -135,7 +140,7 @@ class EditorPlugin(Plugin):
         """ Make sure the documents all open on startup """
         super(EditorPlugin, self).start()
         self.workbench.application.deferred_call(
-            self._update_area_layout, {'type': 'manual'})
+            self._update_area_layout, {'type': 'load'})
 
     # -------------------------------------------------------------------------
     # Device API
@@ -167,10 +172,8 @@ class EditorPlugin(Plugin):
     def _update_area_layout(self, change):
         """ When a document is opened or closed, add or remove it
         from the currently active TabLayout.
-        
         The layout update is deferred so it fires after the items are
         updated by the Looper.
-        
         """
         if change['type'] == 'create':
             return
@@ -199,36 +202,55 @@ class EditorPlugin(Plugin):
             #: Determine which changed
             removed = old.difference(new)
             added = new.difference(old)
-        elif change['type'] == 'manual':
-            old = set([self.active_document])
-            new = set(self.documents)
-            #: Determine which changed
-            removed = old.difference(new)
-            added = new.difference(old)
-
+        elif change['type'] == 'load':
+            removed = {item.doc for item in self.get_editor_items()}
+            added = set(self.documents)
 
         #: Update operations to apply
         ops = []
+        removed_targets = set()
 
         #: Remove any old items
         for doc in removed:
-            ops.append(RemoveItem(
-                item='editor-item-{}'.format(doc.name)
-            ))
+            for item in self.get_editor_items():
+                if item.doc == doc:
+                    removed_targets.add(item.name)
+                    ops.append(RemoveItem(item=item.name))
 
-        #: Add any new items
-        for doc in added:
-            targets = ['editor-item-{}'.format(d.name) for d in self.documents
-                       if d.name != doc.name]
-            item = EditorItem(area, plugin=self, doc=doc)
-            ops.append(InsertTab(
-                item=item.name,
-                target=targets[0] if targets else ''
-            ))
+        # Remove ops
+        if ops:
+            log.debug(ops)
+            area.update_layout(ops)
 
-        #: Now apply all layout update operations
-        print("Updating dock area: {}".format(ops))
-        area.update_layout(ops)
+        # Add each one at a time
+        targets = set([item.name for item in area.dock_items()
+                   if (item.name.startswith("editor-item") and
+                   item.name not in removed_targets)])
+
+        log.info(
+            "Editor added=%s removed=%s targets=%s",
+            added, removed, targets)
+
+
+        # Sort documents so active is last so it's on top when we restore
+        # from a previous state
+        for doc in sorted(added, key=lambda d: int(d == self.active_document)):
+            item = create_editor_item(area, plugin=self, doc=doc)
+            if targets:
+                op = InsertTab(item=item.name, target=list(targets)[-1])
+                try:
+                    area.update_layout(op)
+                except Exception as e:
+                    # If it fails to add as a tab just insert it
+                    log.exception(e)
+                    op = InsertItem(item=item.name)
+                    area.update_layout(op)
+            else:
+                op = InsertItem(item=item.name)
+                area.update_layout(op)
+            targets.add(item.name)
+
+        # Now save it
         self.save_dock_area(change)
 
     def save_dock_area(self, change):
@@ -248,9 +270,16 @@ class EditorPlugin(Plugin):
         ui = self.workbench.get_plugin('micropyde.ui')
         return ui.get_dock_area()
 
+    def get_editor_items(self):
+        dock = self.get_dock_area()
+        EditorDockItem = editor_item_factory()
+        for item in dock.dock_items():
+            if isinstance(item, EditorDockItem):
+                yield item
+
     def get_editor(self):
-        """ Get the editor item for the currently active document 
-        
+        """ Get the editor item for the currently active document
+
         """
         item = 'editor-item-{}'.format(self.active_document.name)
         dock_item = self.get_dock_area().find(item)
@@ -274,7 +303,7 @@ class EditorPlugin(Plugin):
 
     def new_file(self, event):
         """ Create a new file with the given path
-        
+
         """
         path = event.parameters.get('path')
         if not path:
@@ -287,7 +316,7 @@ class EditorPlugin(Plugin):
         """ Close the file with the given path and remove it from
         the document list. If multiple documents with the same file
         are open this only closes the first one it finds.
-        
+
         """
         path = event.parameters.get('path', self.active_document.name)
         docs = self.documents
@@ -303,8 +332,8 @@ class EditorPlugin(Plugin):
             self.active_document = docs[0] if docs else Document()
 
     def open_file(self, event):
-        """ Open a file from the local filesystem 
-        
+        """ Open a file from the local filesystem
+
         """
         path = event.parameters['path']
 
@@ -327,7 +356,7 @@ class EditorPlugin(Plugin):
 
     def save_file(self, event):
         """ Save the currently active document to disk
-        
+
         """
         doc = self.active_document
         assert doc.name, "Can't save a document without a name"
@@ -341,7 +370,7 @@ class EditorPlugin(Plugin):
     def save_file_as(self, event):
         """ Save the currently active document as the given name
         overwriting and creating the directory path if necessary.
-        
+
         """
         doc = self.active_document
         path = event.parameters['path']
@@ -385,7 +414,7 @@ class EditorPlugin(Plugin):
     def autocomplete(self, source, cursor):
         """ Return a list of autocomplete suggestions for the given text.
         Results are based on the modules loaded.
-        
+
         Parameters
         ----------
             source: str

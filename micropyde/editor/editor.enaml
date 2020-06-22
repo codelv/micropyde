@@ -137,7 +137,7 @@ enamldef EditorView(Container): view:
 
 enamldef EditorDockItem(DockItem): item:
     attr doc = plugin.active_document
-    name = 'editor-item-{}'.format(doc.name)
+    name << 'editor-item-{}'.format(doc.name)
     title << format_title(plugin.documents, doc, doc.name, doc.unsaved)
     closed ::
         core = plugin.workbench.get_plugin("enaml.workbench.core")

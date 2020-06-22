@@ -248,4 +248,4 @@ enamldef EditorManifest(PluginManifest):
         DockItem:
             plugin_id = 'micropyde.editor'
             factory = inspection_item_factory
-            layout = 'right'
+            layout = 'left'
