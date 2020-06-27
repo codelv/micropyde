@@ -1,0 +1,134 @@
+"""
+Copyright (c) 2017, Jairus Martin.
+
+Distributed under the terms of the GPL v3 License.
+
+The full license is in the file LICENSE, distributed with this software.
+
+@author: jrm
+"""
+import os
+import enaml
+from enaml.widgets.api import FileDialogEx
+from enaml.workbench.api import Extension, PluginManifest
+from enaml.workbench.core.api import Command
+from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup
+from micropyde.ui.extensions import DOCK_ITEM_POINT, DockItem
+
+
+def erase_flash(event):
+    with enaml.imports():
+        from .dialogs import EraseDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    EraseDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def update_firmware(event):
+    with enaml.imports():
+        from .dialogs import FlashDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    path = FileDialogEx.get_open_file_name(
+        ui.window,
+        current_path=plugin.last_path,
+        name_filters=['*.bin','*.elf'])
+
+    if path:
+        plugin.flash_filename = path
+        plugin.last_path = os.path.dirname(path)
+        FlashDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def get_info(event):
+    with enaml.imports():
+        from .dialogs import BoardInfoDialog
+    ui = event.workbench.get_plugin('enaml.workbench.ui')
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    BoardInfoDialog(ui.window, event=event, plugin=plugin).exec_()
+
+
+def start_server(event):
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    plugin.start_server()
+
+
+def stop_server(event):
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    plugin.stop_server()
+
+
+def list_probes(event):
+    plugin = event.workbench.get_plugin('micropyde.ocd')
+    plugin.list_probes()
+
+
+def plugin_factory():
+    from .plugin import OpenChipDebuggerPlugin
+    return OpenChipDebuggerPlugin()
+
+
+def gdb_server_factory():
+    with enaml.imports():
+        from .view import GDBServerDockItem
+    return GDBServerDockItem
+
+
+enamldef OpenChipDebuggerManifest(PluginManifest):
+    """ The manifest which is registered when the view is loaded.
+
+    This manifest contributes extra menu items to the menu bar and
+    new commands for manipulating the dock area items.
+
+    """
+    id = 'micropyde.ocd'
+    factory = plugin_factory
+    Extension:
+        id = 'commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'micropyde.ocd.erase_flash'
+            handler = erase_flash
+        Command:
+            id = 'micropyde.ocd.update_firmware'
+            handler = update_firmware
+        Command:
+           id = 'micropyde.ocd.get_info'
+           handler = get_info
+        Command:
+           id = 'micropyde.ocd.start_server'
+           handler = start_server
+        Command:
+           id = 'micropyde.ocd.stop_server'
+           handler = stop_server
+        Command:
+           id = 'micropyde.ocd.list_probes'
+           handler = list_probes
+    Extension:
+        id = 'items'
+        point = DOCK_ITEM_POINT
+        DockItem:
+            plugin_id = 'micropyde.ocd'
+            factory = gdb_server_factory
+            layout = 'bottom'
+    Extension:
+        id = 'actions'
+        point = 'enaml.workbench.ui.actions'
+        MenuItem:
+            path = '/ocd'
+            label = 'OCD'
+        ActionItem:
+            path = '/ocd/info'
+            label = 'Board info'
+            command = 'micropyde.ocd.get_info'
+        ActionItem:
+            path = '/ocd/firmware'
+            label = 'Flash firmware...'
+            command = 'micropyde.ocd.update_firmware'
+            after = 'info'
+        ActionItem:
+            path = '/ocd/erase'
+            label = 'Erase flash...'
+            command = 'micropyde.ocd.erase_flash'
+            after = 'firmware'
+

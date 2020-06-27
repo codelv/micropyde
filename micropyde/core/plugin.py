@@ -40,7 +40,7 @@ class CorePlugin(Plugin):
 
         #: Log to stdout
         stream = logging.StreamHandler(sys.stdout)
-        stream.setLevel(logging.INFO)
+        stream.setLevel(logging.DEBUG)
         stream.setFormatter(formatter)
 
         #: Log to rotating handler
@@ -59,3 +59,7 @@ class CorePlugin(Plugin):
         from twisted.python.log import PythonLoggingObserver
         observer = PythonLoggingObserver()
         observer.start()
+
+        #: Disable annoying logs
+        parso = logging.getLogger('parso.python.diff')
+        parso.setLevel(logging.ERROR)

@@ -23,6 +23,7 @@ def main():
         from micropyde.editor.manifest import EditorManifest
         from micropyde.board.manifest import BoardManifest
         from micropyde.esp.manifest import EspManifest
+        from micropyde.ocd.manifest import OpenChipDebuggerManifest
 
     workbench.register(CoreManifest())
     workbench.register(UIManifest())
@@ -30,4 +31,5 @@ def main():
     workbench.register(EditorManifest())
     workbench.register(BoardManifest())
     workbench.register(EspManifest())
+    workbench.register(OpenChipDebuggerManifest())
     workbench.run()

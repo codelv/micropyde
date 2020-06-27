@@ -29,6 +29,7 @@ setup(
   install_requires=[
       'PyQt5', 'enaml', 'enamlx', 'QScintilla', 'twisted', 'autobahn',
       'qt5reactor', 'qtconsole', 'jsonpickle', 'jedi',
-      'pyserial', 'pyflakes', 'esptool',
+      'pyserial', 'pyflakes',
+      'esptool', 'pyOCD',
   ],
 )

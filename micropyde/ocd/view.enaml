@@ -1,0 +1,60 @@
+"""
+Copyright (c) 2020, Jairus Martin.
+
+Distributed under the terms of the GPL v3 License.
+
+The full license is in the file LICENSE, distributed with this software.
+
+@author: jrm
+"""
+from enaml.widgets.api import (
+    Container, MultilineField, PushButton, ProgressBar, Label
+)
+from enaml.layout.api import hbox, vbox, align
+from micropyde.core.api import DockItem
+from micropyde.core.utils import load_icon
+
+
+enamldef GDBServerView(Container):
+    attr plugin
+    attr running: bool << plugin.gdb_server is not None
+
+    constraints = [
+        vbox(
+            hbox(btn_toggle, btn_refresh),
+            source,
+        ),
+        align('v_center', btn_toggle, btn_refresh),
+    ]
+
+    func start():
+        source.text = ""
+        plugin.start_server(stream=source.proxy.widget)
+
+    PushButton: btn_toggle:
+        #text << "Close" if opened else "Open"
+        icon << load_icon("connect" if running else "disconnect")
+        tool_tip << "Running. Click to stop" if running else "Stopped. Click to start"
+        clicked ::
+            if running:
+                plugin.stop_server()
+            else:
+                start()
+    PushButton: btn_refresh:
+        icon << load_icon("arrow_refresh")
+        tool_tip << "Start the server or restart if running already"
+        clicked :: start()
+
+    MultilineField: source:
+        read_only = True
+
+
+
+enamldef GDBServerDockItem(DockItem): view:
+    name = 'gdb-server-item'
+    title = 'GDB Server'
+    closable = False
+    icon = load_icon("server")
+    stretch = 1
+    GDBServerView: errors:
+        plugin << view.plugin

@@ -79,10 +79,7 @@ enamldef FlashDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    attr matches = [p for p in self.items if p.device == plugin.port]
-                    selected << matches[0] if matches else None
-                    selected ::
-                        plugin.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()
@@ -100,22 +97,22 @@ enamldef FlashDialog(Dialog): dialog:
                 SpinBox:
                     value := plugin.flash_baud
                     minimum = 0
-                    maximum = 99999999
+                    maximum = 2**31 - 1
                 Label:
                     text = 'Chip (--chip)'
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_chip.items)
-                    selected := plugin.flash_chip
+                    items = list(plugin.get_member('flash_chip').items)
+                    selected :: plugin.flash_chip = change['value']
                 Label:
                     text = 'Mode (-fm)'
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_mode.items)
-                    selected := plugin.flash_mode
+                    items = list(plugin.get_member('flash_mode').items)
+                    selected :: plugin.flash_mode = change['value']
                 Label:
                     text = "Frequency (-ff)"
                 ObjectCombo:
-                    items = list(EditorPlugin.flash_freq.items)
-                    selected := plugin.flash_freq
+                    items = list(plugin.get_member('flash_freq').items)
+                    selected :: plugin.flash_freq = change['value']
                 Label:
                     text = "SPI Connection"
                 Field:
@@ -132,7 +129,7 @@ enamldef FlashDialog(Dialog): dialog:
                     text = 'Address'
                 SpinBox:
                     minimum = 0
-                    maximum = 99999999999 #: Ummm 16 meg
+                    maximum = 2**31 - 1  #: Ummm 16 meg
                     value := plugin.flash_address
                 Label:
                     text = 'Filename'
@@ -142,9 +139,10 @@ enamldef FlashDialog(Dialog): dialog:
                     PushButton:
                         text = "Browse"
                         clicked ::
-                            path = FileDialogEx.get_open_file_name(self,
-                                                                   current_path='../micropython/fw',
-                                                                   name_filters=['*.bin','*.ota'])
+                            path = FileDialogEx.get_open_file_name(
+                                self,
+                                current_path='../micropython/fw',
+                                name_filters=['*.bin','*.ota'])
                             if path:
                                 plugin.flash_filename = path
 
@@ -212,9 +210,7 @@ enamldef EraseDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    selected ::
-                        editor = event.workbench.get_plugin('micropyde.editor')
-                        editor.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()
@@ -283,7 +279,6 @@ class InfoProcessProtocol(ProcessProtocol):
         v.status = "Success" if reason.value.exitCode == 0 else "Failed"
         self.done.callback(reason.value.exitCode)
 
-
 enamldef BoardInfoDialog(Dialog): dialog:
     title = 'Board Info'
     attr command
@@ -317,9 +312,7 @@ enamldef BoardInfoDialog(Dialog): dialog:
             Form:
                 ObjectCombo: ports:
                     items = comports()
-                    selected ::
-                        editor = event.workbench.get_plugin('micropyde.editor')
-                        editor.port = change['value'].device
+                    selected :: plugin.port = change['value'].device
                 PushButton: btn:
                     text = "Refresh"
                     clicked :: ports.items = comports()
@@ -338,107 +331,3 @@ enamldef BoardInfoDialog(Dialog): dialog:
             PushButton: btn_yes:
                 text = "Get"
                 clicked :: run()
-
-
-enamldef PasswordDialog(Dialog): dialog:
-    title = 'Board Login'
-    attr command
-    attr event
-    attr plugin #: A BoardPlugin
-    attr callback = lambda pwd: None
-    initial_size = (640, 320)
-    TaskDialogStyleSheet:
-            pass
-    TaskDialogBody:
-        TaskDialogInstructionArea:
-            Label:
-                style_class = 'task-dialog-instructions'
-                text = 'Board login'
-        TaskDialogContentArea:
-            Label:
-                style_class = 'task-dialog-content'
-                text = 'Enter password to login'
-            Form:
-                Label:
-                    text = "Password"
-                Field: pwd:
-                    submit_triggers = ['auto_sync']
-                    echo_mode << 'normal' if show.checked else 'password'
-                Label:
-                    pass
-                CheckBox: show:
-                    text = "Show password"
-            Label:
-                text = "Warning: Saved passwords are stored in plain text!"
-
-        TaskDialogCommandArea:
-            constraints = [
-                hbox(save, spacer, btn_yes, btn_no),
-                align('v_center', save, btn_yes, btn_no)
-            ]
-            CheckBox: save:
-                text = "Save password"
-            PushButton: btn_no:
-                text << "Cancel"
-                clicked ::
-                    dialog.callback(None)
-                    dialog.close()
-            PushButton: btn_yes:
-                text = "Login"
-                enabled << len(pwd.text)>=4
-                clicked ::
-                    if save.checked:
-                        plugin.save_password(pwd.text)
-                    plugin.board.write((pwd.text+"\r\n").encode())
-                    dialog.callback(pwd.text)
-                    dialog.close()
-
-
-
-enamldef ProgressDialog(Dialog): dialog:
-    attr command
-    attr event
-    attr plugin #: A BoardPlugin
-    attr view #: A TerminalDockItem
-    initial_size = (640, 320)
-    title = 'Progress'
-    attr caption = "Task is in progress..."
-    TaskDialogStyleSheet:
-            pass
-    TaskDialogBody:
-        TaskDialogInstructionArea:
-            Label:
-                style_class = 'task-dialog-instructions'
-                text << dialog.title
-        TaskDialogContentArea:
-            Label:
-                style_class = 'task-dialog-content'
-                text << dialog.caption
-            Form:
-                Label:
-                    text = "Password"
-                Field: pwd:
-                    submit_triggers = ['auto_sync']
-                    echo_mode << 'normal' if show.checked else 'password'
-                Label:
-                    pass
-                CheckBox: show:
-                    text = "Show password"
-            Label:
-                text = "Warning: Saved passwords are stored in plain text!"
-
-        TaskDialogCommandArea:
-            constraints = [
-                hbox(save, spacer, btn_yes, btn_no),
-                align('v_center', save, btn_yes, btn_no)
-            ]
-            CheckBox: save:
-                text = "Save password"
-            PushButton: btn_no:
-                text << "Cancel"
-                clicked :: dialog.close()
-            PushButton: btn_yes:
-                text = "Login"
-                enabled << len(pwd.text)>=4
-                clicked :: run()
-

@@ -18,6 +18,7 @@ from enaml.workbench.core.api import Command
 from enaml.workbench.ui.api import ActionItem, MenuItem, ItemGroup, Autostart
 from micropyde.ui.extensions import DOCK_ITEM_POINT, DockItem, SETTINGS_PAGE_POINT, SettingsPage
 
+
 def plugin_command(name, event):
     editor = event.workbench.get_plugin('micropyde.board')
     handler = getattr(editor, name)

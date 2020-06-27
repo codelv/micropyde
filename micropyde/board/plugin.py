@@ -374,6 +374,9 @@ class BoardPlugin(Plugin):
     scanning_progress = Int()
     scanning_status = Unicode()
 
+    upload_progress = Int()
+    upload_status = Unicode()
+
     #: Passwords
     passwords = Dict().tag(config=True)
 
@@ -438,10 +441,11 @@ class BoardPlugin(Plugin):
 
     @inlineCallbacks
     def upload_file(self, event):
-        log.info("Uploading current file...")
         editor = self.workbench.get_plugin("micropyde.editor")
-        source = editor.get_editor().get_text().encode()
         path = editor.active_document.name
+        with open(path, 'rb') as f:
+            source = f.read()
+        log.info("Uploading {} to board...".format(path))
 
         board = self.board
         board.disconnect()
@@ -460,8 +464,9 @@ class BoardPlugin(Plugin):
                 import sys
                 import uhashlib
                 import ubinascii
-                print("Uploading file...")
-                f = open('{file}','wb')
+                filename = '{file}'
+                print("Uploading %s..." % filename)
+                f = open(filename,'wb')
                 try:
                     i = {len}
                     n = 0
@@ -513,6 +518,7 @@ class BoardPlugin(Plugin):
         #: Sleep
         yield async_sleep(1000)
 
+        self.upload_progress = 0
         while True:
             wrote = min(i-n, chunk)
             data = source[n:n+wrote]
@@ -521,8 +527,13 @@ class BoardPlugin(Plugin):
             board.write(data)
             n += wrote
 
+            if i:
+                self.upload_progress = min(100, max(0, int(100*n/i)))
+
             #: Sleep
             yield async_sleep(100)
+            if device.lines:
+                self.upload_status = device.lines[-1]
 
     def run_script(self, event):
         #: Open the port and let it read

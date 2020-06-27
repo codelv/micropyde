@@ -104,5 +104,6 @@ ENV/
 
 .kdev4/
 *.kdev4
+*.kate-swp
 *.db
 scripts/
