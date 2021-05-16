@@ -58,9 +58,9 @@ def stop_server(event):
     plugin.stop_server()
 
 
-def list_probes(event):
+def refresh(event):
     plugin = event.workbench.get_plugin('micropyde.ocd')
-    plugin.list_probes()
+    plugin.refresh()
 
 
 def plugin_factory():
@@ -102,8 +102,8 @@ enamldef OpenChipDebuggerManifest(PluginManifest):
            id = 'micropyde.ocd.stop_server'
            handler = stop_server
         Command:
-           id = 'micropyde.ocd.list_probes'
-           handler = list_probes
+           id = 'micropyde.ocd.refresh'
+           handler = refresh
     Extension:
         id = 'items'
         point = DOCK_ITEM_POINT
@@ -117,6 +117,7 @@ enamldef OpenChipDebuggerManifest(PluginManifest):
         MenuItem:
             path = '/ocd'
             label = 'OCD'
+            after = 'file'
         ActionItem:
             path = '/ocd/info'
             label = 'Board info'

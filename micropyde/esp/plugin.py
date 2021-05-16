@@ -11,13 +11,13 @@ import os
 import sys
 import esptool
 
-from atom.api import Unicode, Int, Bool, Enum
+from atom.api import Str, Int, Bool, Enum
 from micropyde.core.api import Plugin
 
 
 class EspPlugin(Plugin):
     #: Flash setup
-    port = Unicode('/dev/ttyUSB0')
+    port = Str('/dev/ttyUSB0')
     flash_chip = Enum('auto', 'esp8266', 'esp32')
     flash_baud = Int(460800)  #, 230400, 921600, 1500000, 115200, 74880)
     flash_freq = Enum('keep', '40m', '26m', '20m', '80m')
@@ -25,12 +25,12 @@ class EspPlugin(Plugin):
     flash_size = Enum('detect', '1MB', '2MB', '4MB', '8MB', '16M',
                       '256KB', '512KB', '2MB-c1', '4MB-c1')
     flash_address = Int()
-    flash_spi_connection = Unicode()
+    flash_spi_connection = Str()
     flash_compress = Bool()
     flash_verify = Bool()
-    flash_filename = Unicode()
+    flash_filename = Str()
 
-    last_path = Unicode(os.path.expanduser('~/'))
+    last_path = Str(os.path.expanduser('~/'))
 
     def build_cmd(self, *args):
         return [sys.executable, esptool.__file__] + list(args)

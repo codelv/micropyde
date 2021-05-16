@@ -57,7 +57,7 @@ def run(code, filename, reporter=None):
                     if sys.version_info >= (3, ) and isinstance(text, bytes):
                         try:
                             text = text.decode('ascii')
-                        except UnicodeDecodeError:
+                        except StrDecodeError:
                             text = None
             offset -= 1
 

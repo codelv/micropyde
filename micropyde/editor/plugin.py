@@ -13,7 +13,7 @@ import enaml
 from glob import glob
 
 from atom.api import (
-    Tuple, Unicode, Int, Instance, List, Bool, Enum, Dict,
+    Tuple, Str, Int, Instance, List, Bool, Enum, Dict,
     ContainerList, observe
 )
 
@@ -23,7 +23,7 @@ from enaml.application import timed_call
 
 from . import inspection
 from enaml.scintilla.themes import THEMES
-
+from enaml.scintilla.mono_font import MONO_FONT
 
 def editor_item_factory():
     with enaml.imports():
@@ -38,10 +38,10 @@ def create_editor_item(*args, **kwargs):
 
 class Document(Model):
     #: Name of the current document
-    name = Unicode().tag(config=True)
+    name = Str().tag(config=True)
 
     #: Source code
-    source = Unicode()
+    source = Str()
     cursor = Tuple(default=(0, 0))
 
     #: Any unsaved changes
@@ -106,19 +106,21 @@ class EditorPlugin(Plugin):
     #: Module index
     modules = Dict().tag(config=True)
     indexing_progress = Int()
-    indexing_status = Unicode()
+    indexing_status = Str()
 
     #: Files on device
     files = Dict()
     scanning_progress = Int()
-    scanning_status = Unicode()
+    scanning_status = Str()
 
     #: Opened files
     documents = ContainerList(Document).tag(config=True)
     active_document = Instance(Document).tag(config=True)
-    last_path = Unicode(os.path.expanduser('~/')).tag(config=True)
+    last_path = Str(os.path.expanduser('~/')).tag(config=True)
 
     #: Editor settings
+    font_size = Int(12).tag(config=True)  #: Default is 12 pt
+    font_family = Str(MONO_FONT.split()[-1]).tag(config=True)
     theme = Enum('friendly', *THEMES.keys()).tag(config=True)
     zoom = Int(0).tag(config=True)  #: Relative to default
 
@@ -126,11 +128,11 @@ class EditorPlugin(Plugin):
     upy_board = Enum('esp8266', 'pyb', 'stm32', 'teensy', 'unix',
                      'windows', 'cc3200', 'zephyr', 'pic16bit',
                      'minimal').tag(config=True)
-    upy_path = Unicode(os.path.abspath(
+    upy_path = Str(os.path.abspath(
         '../micropython/micropython/')).tag(config=True)
-    upy_lib_path = Unicode(os.path.abspath(
+    upy_lib_path = Str(os.path.abspath(
         '../micropython/micropython-lib/')).tag(config=True)
-    project_path = Unicode(os.path.abspath('./project/')).tag(config=True)
+    project_path = Str(os.path.abspath('./project/')).tag(config=True)
     sys_path = List()
 
     #: Dock area layout

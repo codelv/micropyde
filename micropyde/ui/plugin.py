@@ -10,7 +10,7 @@ Created on Dec 12, 2017
 @author: jrm
 """
 import enaml
-from atom.api import Atom, List, Unicode, Instance, Dict
+from atom.api import Atom, List, Str, Instance, Dict
 from micropyde.core.api import Plugin, DockItem, log
 from enaml.layout.api import AreaLayout, DockBarLayout, HSplitLayout, TabLayout
 from . import extensions
@@ -18,7 +18,7 @@ from . import extensions
 
 class MicropydePlugin(Plugin):
     #: Project site
-    wiki_page = Unicode("https;//www.codelv.com/projects/micropyde")
+    wiki_page = Str("https;//www.codelv.com/projects/micropyde")
 
     #: Dock items to add
     dock_items = List(DockItem)
@@ -71,7 +71,7 @@ class MicropydePlugin(Plugin):
     # Dock API
     # -------------------------------------------------------------------------
     def create_new_area(self):
-        """ Create the dock area 
+        """ Create the dock area
         """
         with enaml.imports():
             from .dock import DockView
@@ -83,7 +83,7 @@ class MicropydePlugin(Plugin):
 
     def get_dock_area(self):
         """ Get the dock area
-        
+
         Returns
         -------
             area: DockArea
@@ -94,11 +94,11 @@ class MicropydePlugin(Plugin):
         return ui.workspace.content.find('dock_area')
 
     def _refresh_dock_items(self, change=None):
-        """ Reload all DockItems registered by any Plugins 
-        
-        Any plugin can add to this list by providing a DockItem 
+        """ Reload all DockItems registered by any Plugins
+
+        Any plugin can add to this list by providing a DockItem
         extension in their PluginManifest.
-        
+
         """
         workbench = self.workbench
         point = workbench.get_extension_point(extensions.DOCK_ITEM_POINT)
@@ -134,7 +134,7 @@ class MicropydePlugin(Plugin):
 
     def _refresh_layout(self, layout):
         """ Create the layout for all the plugins
-        
+
 
         """
         if not self.dock_items:
@@ -165,11 +165,11 @@ class MicropydePlugin(Plugin):
         log.debug("Settings page: {}".format(change))
 
     def _refresh_settings_pages(self, change=None):
-        """ Reload all SettingsPages registered by any Plugins 
-        
-        Any plugin can add to this list by providing a SettingsPage 
+        """ Reload all SettingsPages registered by any Plugins
+
+        Any plugin can add to this list by providing a SettingsPage
         extension in their PluginManifest.
-        
+
         """
         workbench = self.workbench
         point = workbench.get_extension_point(extensions.SETTINGS_PAGE_POINT)

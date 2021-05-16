@@ -21,11 +21,15 @@ from enaml.stdlib.task_dialog import (
 )
 from enaml.widgets.api import (
     Dialog, Field, Label, PushButton, RadioButton, CheckBox, Html,
-    ProgressBar, ObjectCombo, Form, Container, SpinBox, FileDialogEx
+    ProgressBar, ObjectCombo, Form, Container, SpinBox, FileDialogEx, HGroup
 )
 from serial.tools.list_ports import comports
 from twisted.internet.protocol import ProcessProtocol
 from twisted.internet.defer import Deferred
+from micropyde.core.utils import load_icon
+
+
+from .plugin import OpenChipDebuggerPlugin
 
 
 class FlashProcessProtocol(ProcessProtocol):
@@ -41,8 +45,9 @@ class FlashProcessProtocol(ProcessProtocol):
                 self.view.progress = int(m.group(1))
             source.append(line)
         self.view.source += "<br/>".join(source)
+    errReceived =  outReceived
 
-    def processExited(self, reason):
+    def processEnded(self, reason):
         self.view.source += "Exited: {}".format(reason.value.exitCode)
         self.view.complete = True
         self.view.status = "Success" if reason.value.exitCode == 0 else "Failed"
@@ -65,8 +70,8 @@ enamldef FlashDialog(Dialog): dialog:
         dialog.started = True
         details.visible = False
         plugin.update_firmware(proto)
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -174,7 +179,9 @@ class EraseProcessProtocol(ProcessProtocol):
             source.append(line)
         self.view.source += "<br/>".join(source)
 
-    def processExited(self, reason):
+    errReceived =  outReceived
+
+    def processEnded(self, reason):
         v = self.view
         v.source += "Exited: {}".format(reason.value.exitCode)
         v.complete = True
@@ -196,8 +203,8 @@ enamldef EraseDialog(Dialog): dialog:
         proto = EraseProcessProtocol(dialog)
         plugin.erase_flash(proto)
 
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -208,12 +215,37 @@ enamldef EraseDialog(Dialog): dialog:
                 style_class = 'task-dialog-content'
                 text = 'This operation cannot be undone.'
             Form:
-                ObjectCombo: ports:
-                    items = comports()
-                    selected :: plugin.port = change['value'].device
-                PushButton: btn:
-                    text = "Refresh"
-                    clicked :: ports.items = comports()
+                Label:
+                    text = "Target"
+                HGroup:
+                    padding = 0
+                    align_widths = False
+                    ObjectCombo: ports:
+                        items << [None] + plugin.available_probes
+                        to_string = lambda p: p.info if p else ''
+                        selected := plugin.probe
+                    ObjectCombo: cmb_target:
+                        items << [None] + plugin.available_targets
+                        to_string = lambda t: t.part_number or t.name if t else ''
+                        selected := plugin.target
+                        editable = True
+                    PushButton: btn:
+                        icon = load_icon("arrow_refresh")
+                        tool_tip = "Refresh"
+                        clicked :: plugin.refresh()
+                Label:
+                    text = "Mode"
+                ObjectCombo:
+                    items = list(OpenChipDebuggerPlugin.erase_mode.items)
+                    to_string = lambda it: it.title()
+                    selected := plugin.erase_mode
+                Conditional:
+                    condition << plugin.erase_mode == 'sector'
+                    Label:
+                        text = "Sectors"
+                    Field:
+                        text := plugin.erase_sectors
+
         TaskDialogDetailsArea: details:
             visible = False
             Html: console:
@@ -273,7 +305,7 @@ class InfoProcessProtocol(ProcessProtocol):
             source.append(line)
         self.view.source += "<br/>".join(source)
 
-    def processExited(self, reason):
+    def processEnded(self, reason):
         v = self.view
         v.complete = True
         v.status = "Success" if reason.value.exitCode == 0 else "Failed"
@@ -298,8 +330,8 @@ enamldef BoardInfoDialog(Dialog): dialog:
         # proto.done.addCallback(
         #     lambda r,p=plugin,proto=proto:p.get_chip_info(proto))
 
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:

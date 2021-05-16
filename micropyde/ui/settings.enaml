@@ -45,8 +45,8 @@ enamldef SettingsDialog(Dialog): dialog:
     initial_size = (720, 480)
     attr plugin
     attr event
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:

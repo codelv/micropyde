@@ -7,7 +7,7 @@ The full license is in the file LICENSE, distributed with this software.
 
 @author: jrm
 """
-from atom.api import Atom, Bool, Enum, Event, Float, Int, Str, Unicode
+from atom.api import Atom, Bool, Enum, Event, Float, Int, Str, Str
 
 from enaml.core.api import DynamicTemplate
 from enaml.stdlib.fields import FloatField
@@ -64,8 +64,8 @@ template FormControl(Attr, MemberType: Str):
         text :: setattr(model, Attr, str(text))
 
 
-template FormControl(Attr, MemberType: Unicode):
-    """ A form control template specialization for Unicode members.
+template FormControl(Attr, MemberType: Str):
+    """ A form control template specialization for Str members.
 
     This control uses a Field to represent the value.
 

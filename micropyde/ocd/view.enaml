@@ -8,7 +8,7 @@ The full license is in the file LICENSE, distributed with this software.
 @author: jrm
 """
 from enaml.widgets.api import (
-    Container, MultilineField, PushButton, ProgressBar, Label
+    Container, MultilineField, ObjectCombo, PushButton, ProgressBar, Label
 )
 from enaml.layout.api import hbox, vbox, align
 from micropyde.core.api import DockItem
@@ -21,15 +21,26 @@ enamldef GDBServerView(Container):
 
     constraints = [
         vbox(
-            hbox(btn_toggle, btn_refresh),
+            hbox(cmb_probe, cmb_target, btn_toggle, btn_refresh),
             source,
         ),
-        align('v_center', btn_toggle, btn_refresh),
+        align('v_center', cmb_probe, cmb_target, btn_toggle, btn_refresh),
     ]
 
     func start():
         source.text = ""
         plugin.start_server(stream=source.proxy.widget)
+
+    ObjectCombo: cmb_probe:
+        items << [None] + plugin.available_probes
+        to_string = lambda p: p.info if p else ''
+        selected := plugin.probe
+
+    ObjectCombo: cmb_target:
+        items << [None] + plugin.available_targets
+        to_string = lambda t: t.part_number or t.name if t else ''
+        selected := plugin.target
+        editable = True
 
     PushButton: btn_toggle:
         #text << "Close" if opened else "Open"
@@ -42,8 +53,8 @@ enamldef GDBServerView(Container):
                 start()
     PushButton: btn_refresh:
         icon << load_icon("arrow_refresh")
-        tool_tip << "Start the server or restart if running already"
-        clicked :: start()
+        tool_tip << "Refresh probes"
+        clicked :: plugin.refresh()
 
     MultilineField: source:
         read_only = True

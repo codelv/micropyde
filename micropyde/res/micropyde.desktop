@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Micropyde
+GenericName=Micropyde
+Comment=OpenOCD server and serial monitor
+Exec=/home/jrm/miniconda3/envs/micropython/bin/micropyde
+Icon=/home/jrm/Workspace/micropyde/micropyde/res/icons/micropyde.png
+Terminal=false
+Categories=Graphics;Office;
+MimeType=image/svg+xml;
+Keywords=gdb;arm;embedded;cpu;
+

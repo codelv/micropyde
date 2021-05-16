@@ -11,14 +11,14 @@ import os
 import sys
 import logging
 from logging.handlers import RotatingFileHandler
-from atom.api import Unicode
+from atom.api import Str
 from .api import Plugin
 
 
 class CorePlugin(Plugin):
 
-    _log_filename = Unicode()
-    _log_format = Unicode(
+    _log_filename = Str()
+    _log_format = Str(
         '%(asctime)-15s | %(levelname)-7s | %(name)s | %(message)s')
 
     def start(self):

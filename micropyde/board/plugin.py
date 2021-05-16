@@ -13,7 +13,7 @@ import socket
 import hashlib
 import textwrap
 from base64 import b64decode
-from atom.api import Dict, Int, Instance, Unicode, List, observe
+from atom.api import Dict, Int, Instance, Str, List, observe
 from autobahn.twisted.websocket import (
     WebSocketClientFactory, WebSocketClientProtocol
 )
@@ -35,7 +35,7 @@ class Connection(Model):
     """
 
     #: The connection name
-    name = Unicode()
+    name = Str()
 
     def is_available(self):
         raise NotImplementedError
@@ -57,7 +57,7 @@ class Connection(Model):
 
 class SerialConnection(Connection):
     #: Connection settings
-    port = Unicode('/dev/ttyUSB0').tag(config=True)
+    port = Str('/dev/ttyUSB0').tag(config=True)
     ports = List()
     baudrate = Int(115200).tag(config=True)
 
@@ -113,7 +113,7 @@ class WebsocketConnection(Connection):
     #: ws address
     #: TODO: Config this
     addresses = List().tag(config=True)
-    address = Unicode('192.168.41.144').tag(config=True)
+    address = Str('192.168.41.144').tag(config=True)
 
     #: Ws port
     port = Int(8266).tag(config=True)
@@ -367,15 +367,15 @@ class BoardPlugin(Plugin):
     #: Module index
     modules = Dict().tag(config=True)
     indexing_progress = Int()
-    indexing_status = Unicode()
+    indexing_status = Str()
 
     #: Files on device
     files = Dict().tag(config=True)
     scanning_progress = Int()
-    scanning_status = Unicode()
+    scanning_status = Str()
 
     upload_progress = Int()
-    upload_status = Unicode()
+    upload_status = Str()
 
     #: Passwords
     passwords = Dict().tag(config=True)

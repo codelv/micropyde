@@ -65,8 +65,8 @@ enamldef FlashDialog(Dialog): dialog:
         dialog.started = True
         details.visible = False
         plugin.update_firmware(proto)
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -198,8 +198,8 @@ enamldef EraseDialog(Dialog): dialog:
         proto = EraseProcessProtocol(dialog)
         plugin.erase_flash(proto)
 
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -303,8 +303,8 @@ enamldef BoardInfoDialog(Dialog): dialog:
         # proto.done.addCallback(
         #     lambda r,p=plugin,proto=proto:p.get_chip_info(proto))
 
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -347,8 +347,8 @@ enamldef PasswordDialog(Dialog): dialog:
     attr plugin #: A BoardPlugin
     attr callback = lambda pwd: None
     initial_size = (640, 320)
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
@@ -403,8 +403,8 @@ enamldef ProgressDialog(Dialog): dialog:
     initial_size = (640, 320)
     title = 'Progress'
     attr caption = "Task is in progress..."
-    TaskDialogStyleSheet:
-            pass
+    #TaskDialogStyleSheet:
+    #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:

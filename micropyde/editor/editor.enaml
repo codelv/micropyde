@@ -101,9 +101,17 @@ enamldef EditorView(Container): view:
     alias editor
     attr plugin
     attr model
+
     Scintilla: editor:
         syntax = 'enaml'#detect_syntax(model.name)
-        theme  << THEMES[plugin.theme] if plugin else THEMES['tango']
+        attr editor_font: str << f'{plugin.font_size}pt "{plugin.font_family}"'
+
+        func update_font(theme, font):
+            theme['settings']['font'] = font
+            return theme.copy()
+
+        theme  << update_font(
+            THEMES[plugin.theme] if plugin else THEMES['tango'], editor_font)
         settings = {
             "tab_width": 4,
             "use_tabs": False,

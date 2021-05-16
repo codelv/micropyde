@@ -11,8 +11,10 @@ from serial.tools.list_ports import comports
 from twisted.internet.protocol import Protocol
 from enaml.layout.api import hbox, vbox, align
 from enaml.widgets.api import (
-    Container, ObjectCombo, PushButton, Html, Field, Timer, Splitter, SplitItem
+    Container, ObjectCombo, PushButton, Html, Field, Timer, RawWidget,
+    Splitter, SplitItem,
 )
+from enaml.qt.QtWidgets import QPlainTextEdit
 from enaml.scintilla.api import Scintilla
 from enaml.scintilla.themes import THEMES
 from enamlx.widgets.api import KeyEvent
@@ -42,9 +44,7 @@ class TerminalProtocol(Protocol):
 
         try:
             data = data.decode('utf-8','replace')
-            widget.append(data)
-            #: Scroll to end
-            widget.ensureLineVisible(widget.lines())
+            widget.insertPlainText(data)
 
             #: Notify any listeners
             for listener in self.listeners:
@@ -57,6 +57,16 @@ class TerminalProtocol(Protocol):
             print("Failed to read output: {}".format(e))
 
 
+class PlainTextEdit(RawWidget):
+    """ QTextEdit used by the MultiLineField is horribly slow at appending
+    text. This widget is significantly faster.
+
+    """
+    def create_widget(self, parent):
+        widget = QPlainTextEdit(parent)
+        widget.setReadOnly(True)
+        widget.setMaximumBlockCount(1000)
+        return widget
 
 
 enamldef MonitorDockItem(DockItem): view:
@@ -100,6 +110,7 @@ enamldef MonitorDockItem(DockItem): view:
             device.write(text.encode())
 
         editor.set_text("")
+
     Container:
         constraints = [
             vbox(
@@ -129,7 +140,7 @@ enamldef MonitorDockItem(DockItem): view:
             #text = "Clear"
             icon = load_icon("bin")
             tool_tip = "Clear console"
-            clicked :: console.set_text("")
+            clicked :: console.proxy.widget.clear()
         PushButton: btn_refresh:
             icon = load_icon("arrow_refresh")
             tool_tip = "Refresh ports"
@@ -140,26 +151,10 @@ enamldef MonitorDockItem(DockItem): view:
                 Container:
                     padding = 0
                     resist_height = 'weak'
-                    Scintilla: console:
-                        syntax = "python"
-                        theme << THEMES[editor_plugin.theme] if editor_plugin else 'friendly'
-                        #text_changed ::
-                        #    self.proxy.widget.
-                        activated ::
-                            #set_text(getattr(console, 'buffer'))
-                            self.proxy.widget.setReadOnly(True)
+                    PlainTextEdit: console:
+                        hug_width = 'ignore'
+                        hug_height = 'ignore'
 
-                        settings = {
-                            "tab_width": 4,
-                            "use_tabs": False,
-                            "indent": 4,
-                            "tab_indents": True,
-                            "backspace_unindents": True,
-                        }
-                        # Timer: timer:
-                    #     interval = 350
-                    #     single_shot = True
-                    #     timeout :: setattr(console, "buffer", str(editor.get_text()))
             SplitItem:
                 Container:
                     padding = 0
