@@ -57,8 +57,9 @@ enamldef SerialConnectionForm(Container):
     Form:
         Label:
             text = "Port"
-        Field:
-            text := model.port
+        ObjectCombo:
+            items << model.ports
+            selected := model.comport
         Label:
             text = "Baudrate"
         SpinBox:

@@ -13,7 +13,7 @@ import socket
 import hashlib
 import textwrap
 from base64 import b64decode
-from atom.api import Dict, Int, Instance, Str, List, observe
+from atom.api import Dict, Int, Instance, Str, List, Value, observe
 from autobahn.twisted.websocket import (
     WebSocketClientFactory, WebSocketClientProtocol
 )
@@ -64,20 +64,29 @@ class SerialConnection(Connection):
     #: Actual connection
     serial_port = Instance(SerialPort)
 
+    #: Comport instance
+    comport = Value()
+
     def is_available(self):
         self.ports = comports()
         self.name = self._default_name()
         return bool(self.ports)
 
     def _default_name(self):
-        for port in self.ports:
-            if port.device == self.port:
-                return str(port)
+        for comport in self.ports:
+            if comport.device == self.port:
+                self.comport = comport
+                return str(comport)
         return self.port
 
     @observe('port')
     def _refresh_name(self, change):
         self.name = self._default_name()
+
+    def _observe_comport(self, change):
+        """ Keep name in sync with comport """
+        if change['type'] == 'update':
+            self.port = self.comport.device
 
     def connect(self, protocol):
         d = Deferred()
