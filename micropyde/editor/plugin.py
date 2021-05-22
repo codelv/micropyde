@@ -70,8 +70,11 @@ class Document(Model):
         return ""
 
     def _observe_source(self, change):
-        self._update_errors(change)
-        self._update_suggestions(change)
+        try:
+            self._update_errors(change)
+            self._update_suggestions(change)
+        except Exception as e:
+            log.error(e)
         if change['type'] == 'update':
             try:
                 with open(self.name) as f:
