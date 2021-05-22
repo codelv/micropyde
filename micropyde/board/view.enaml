@@ -15,6 +15,7 @@ from enaml.widgets.api import (
     Splitter, SplitItem,
 )
 from enaml.qt.QtWidgets import QPlainTextEdit
+from enaml.qt.QtGui import QTextCursor
 from enaml.scintilla.api import Scintilla
 from enaml.scintilla.themes import THEMES
 from enamlx.widgets.api import KeyEvent
@@ -43,8 +44,10 @@ class TerminalProtocol(Protocol):
         #: Append text
 
         try:
-            data = data.decode('utf-8','replace')
+            data = data.decode('utf-8', 'replace')
+            widget.moveCursor(QTextCursor.End)
             widget.insertPlainText(data)
+            widget.moveCursor(QTextCursor.End)
 
             #: Notify any listeners
             for listener in self.listeners:
