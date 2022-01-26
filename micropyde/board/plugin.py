@@ -12,6 +12,7 @@ import enaml
 import socket
 import hashlib
 import textwrap
+import traceback
 from base64 import b64decode
 from atom.api import Dict, Int, Instance, Str, List, Value, observe
 from autobahn.twisted.websocket import (
@@ -27,6 +28,43 @@ from serial.tools.list_ports import comports
 from enaml.application import deferred_call, timed_call
 from micropyde.core.api import Plugin, Model
 from micropyde.core.utils import async_sleep, log
+
+UPLOAD_TEMPLATE = """
+def __uploader__(filename, filesize, expected_hash):
+    import sys
+    import uhashlib
+    import ubinascii
+    print("Uploading %s..." % filename)
+    f = open(filename, 'wb')
+    try:
+        n = 0
+        while n < filesize:
+            cnt = min(filesize - n, 64)
+            n += f.write(sys.stdin.read(cnt))
+            print('Uploaded: %i of %i'%(n, filesize))
+    except Exception as e:
+        print(e)
+    finally:
+        f.close()
+    try:
+        print("Verifying...")
+        f = open(filename, 'rb')
+        hash = uhashlib.sha256()
+        while True:
+            data = f.read(64)
+            if not data:
+                break
+            hash.update(data)
+        if ubinascii.hexlify(hash.digest()) == expected_hash:
+            print("Upload success!")
+        else:
+            print("Upload failed (hash mismatch)!")
+    except Exception as e:
+        print(e)
+    finally:
+        f.close()
+__uploader__(\'{filename}\', {size}, b\'{expected_hash}\')
+"""
 
 
 class Connection(Model):
@@ -283,6 +321,22 @@ class Board(Model):
     def write(self, message):
         return self.connection.write(message)
 
+    @inlineCallbacks
+    def write_in_chunks(self, message, bufsize=64, sleep=50, callback=None):
+        i = 0
+        n = len(message)
+        total = max(1, n)
+        while True:
+            wrote = min(n-i, bufsize)
+            data = message[i:i+wrote]
+            if not data:
+                break
+            i += wrote
+            self.write(data)
+            if callback is not None:
+                callback(100*i/total)
+            yield async_sleep(sleep)
+
     def disconnect(self):
         return self.connection.disconnect()
 
@@ -294,11 +348,13 @@ class QueryProtocol(LineReceiver):
     """
     timeout = 100
 
-    def __init__(self, plugin):
+    def __init__(self, plugin, callback=None):
         self.plugin = plugin
         self.connect_event = Deferred()
         self.logged_in = Deferred()
         self.request = None
+        self.callback = callback
+        self.active = True
 
     def ready(self):
         return self.connect_event
@@ -325,10 +381,16 @@ class QueryProtocol(LineReceiver):
 
     def lineReceived(self, line):
         log.debug(line)
-        self.lines.append(line.decode())
+        text = line.decode()
+        self.lines.append(text)
         if self.request:
             self.pending += 1
             timed_call(self.timeout, self.finish)
+        if self.callback:
+            try:
+                self.callback(text)
+            except Exception as e:
+                log.exception(e)
 
     def finish(self):
         self.pending -= 1
@@ -456,93 +518,56 @@ class BoardPlugin(Plugin):
             source = f.read()
         log.info("Uploading {} to board...".format(path))
 
-        board = self.board
-        board.disconnect()
-        device = QueryProtocol(self)
-        yield board.connect(device)
-        yield device.login()
+        with enaml.imports():
+            from .dialogs import ProgressDialog
+        ui = self.workbench.get_plugin("micropyde.ui")
+        dialog = ProgressDialog(
+            ui.get_dock_area(),
+            plugin=self,
+            title="Uploading File...",
+            heading=f"Uploading {path} to board...",
+            status="Connecting...")
+        dialog.show()
+        try:
+            board = self.board
+            board.disconnect()
 
-        hash = hashlib.sha256()
-        hash.update(source)
-        expected_hash = hash.hexdigest()
-        log.info("Expected Hash: {}".format(expected_hash))
+            session = QueryProtocol(self)
 
-        #: TODO: Apparently this is to big to send over the websocket...
-        board.write(b'\n\x05'+textwrap.dedent("""
-            def __uploader__():
-                import sys
-                import uhashlib
-                import ubinascii
-                filename = '{file}'
-                print("Uploading %s..." % filename)
-                f = open(filename,'wb')
-                try:
-                    i = {len}
-                    n = 0
-                    chunk = 64
-                    while n < i:
-                        chunk = min(i-n, chunk)
-                        n += f.write(sys.stdin.read(chunk))
-                        print('Uploaded: %i of %i'%(n,i))
-                except Exception as e:
-                    print(e)
-                finally:
-                    f.close()
-                #: Verify
-                try:
-                    print("Verifying...")
-                    f = open('{file}', 'rb')
-                    hash = uhashlib.sha256()
-                    while True:
-                        data = f.read(64)
-                        if not data:
-                            break
-                        hash.update(data)
-                    upload_hash = ubinascii.hexlify(hash.digest())
-                    expected_hash = b'{expected_hash}'
-                    print("Expected hash: {{}}".format(
-                        expected_hash
-                    ))
-                    print("Actual hash:   {{}}".format(
-                        upload_hash
-                    ))
-                    if upload_hash == expected_hash:
-                        print("Upload success!")
-                    else:
-                        print("Upload failed (hash mismatch)!")
-                except Exception as e:
-                    print(e)
-                finally:
-                    f.close()
-            __uploader__()""".format(
-            file=os.path.split(path)[-1],
-            expected_hash=expected_hash,
-            len=len(source) #: Test...
-        )).encode()+b'\n\x04')
+            def line_received(text):
+                dialog.status = text[0:200]
 
-        #: Have to write to the port slowly... not sure why?
-        i = len(source)
-        n = 0
-        chunk = 64
-        #: Sleep
-        yield async_sleep(1000)
+            session.callback = line_received
+            yield board.connect(session)
+            yield session.login()
 
-        self.upload_progress = 0
-        while True:
-            wrote = min(i-n, chunk)
-            data = source[n:n+wrote]
-            if not data:
-                break
-            board.write(data)
-            n += wrote
+            hash = hashlib.sha256()
+            hash.update(source)
+            expected_hash = hash.hexdigest()
+            log.info("Expected Hash: {}".format(expected_hash))
 
-            if i:
-                self.upload_progress = min(100, max(0, int(100*n/i)))
+            uploader = UPLOAD_TEMPLATE.format(
+                filename=os.path.split(path)[-1],
+                expected_hash=expected_hash,
+                size=len(source)
+            ).encode()
 
-            #: Sleep
+            def on_progress(percent):
+                dialog.progress = percent
+
+            board.write(b'\x03\n\x05')
+            yield async_sleep(10)
+            dialog.status = "Sending uploader..."
+            yield board.write_in_chunks(uploader, callback=on_progress)
+            board.write(b'\n\x04')
             yield async_sleep(100)
-            if device.lines:
-                self.upload_status = device.lines[-1]
+            dialog.status = "Uploading..."
+            yield board.write_in_chunks(source, callback=on_progress)
+
+        except Exception as e:
+            log.exception(e)
+            dialog.status = f'Upload error {traceback.format_exc()}'
+            raise e
 
     def run_script(self, event):
         #: Open the port and let it read

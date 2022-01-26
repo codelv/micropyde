@@ -396,49 +396,33 @@ enamldef PasswordDialog(Dialog): dialog:
 
 
 enamldef ProgressDialog(Dialog): dialog:
-    attr command
-    attr event
     attr plugin #: A BoardPlugin
     attr view #: A TerminalDockItem
     initial_size = (640, 320)
     title = 'Progress'
-    attr caption = "Task is in progress..."
+    attr heading: str = "Task"
+    attr status: str = "Task is in progress..."
+    attr progress = 0
     #TaskDialogStyleSheet:
     #        pass
     TaskDialogBody:
         TaskDialogInstructionArea:
             Label:
                 style_class = 'task-dialog-instructions'
-                text << dialog.title
+                text << dialog.heading
         TaskDialogContentArea:
             Label:
                 style_class = 'task-dialog-content'
-                text << dialog.caption
-            Form:
-                Label:
-                    text = "Password"
-                Field: pwd:
-                    submit_triggers = ['auto_sync']
-                    echo_mode << 'normal' if show.checked else 'password'
-                Label:
-                    pass
-                CheckBox: show:
-                    text = "Show password"
-            Label:
-                text = "Warning: Saved passwords are stored in plain text!"
+                text << dialog.status
+            ProgressBar:
+                value << max(0, min(100, int(progress)))
 
         TaskDialogCommandArea:
             constraints = [
-                hbox(save, spacer, btn_yes, btn_no),
-                align('v_center', save, btn_yes, btn_no)
+                hbox(spacer, btn_no),
+                align('v_center', btn_no)
             ]
-            CheckBox: save:
-                text = "Save password"
             PushButton: btn_no:
-                text << "Cancel"
+                text << "Close"
                 clicked :: dialog.close()
-            PushButton: btn_yes:
-                text = "Login"
-                enabled << len(pwd.text)>=4
-                clicked :: run()
 
